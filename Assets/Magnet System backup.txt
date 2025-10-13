@@ -1,0 +1,343 @@
+using UnityEngine;
+using System.Collections.Generic;
+
+public class MagnetSystem : MonoBehaviour
+{
+    public static MagnetSystem Instance;
+    
+    [Header("Colors")]
+    public Color availableColor = Color.green;
+    public Color occupiedColor = Color.red;
+    
+    public List<Transform> allMagnets = new List<Transform>();
+    private Dictionary<Transform, bool> magnetAvailability = new Dictionary<Transform, bool>();
+    private Dictionary<Transform, HexagonPiece> magnetToPieceMap = new Dictionary<Transform, HexagonPiece>();
+	private Dictionary<string, List<string>> adjacentMagnets = new Dictionary<string, List<string>>()
+    {
+        {"Magnet_1", new List<string>{"Magnet_6", "Magnet_3"}},
+        {"Magnet_2", new List<string>{"Magnet_5", "Magnet_4"}},
+        {"Magnet_3", new List<string>{"Magnet_1", "Magnet_5"}},
+        {"Magnet_4", new List<string>{"Magnet_2", "Magnet_6"}},
+        {"Magnet_5", new List<string>{"Magnet_3", "Magnet_2"}},
+        {"Magnet_6", new List<string>{"Magnet_4", "Magnet_1"}}
+    };
+	// Nuevo: Estado de selección actual
+    public HexagonPiece CurrentlySelectedPiece { get; private set; }
+
+    public bool CanSelectPiece => CurrentlySelectedPiece == null;
+	private bool isConnectingInProgress = false;
+	[Header("Collision Settings")]
+    public float magnetDetectionRadius = 0.15f; // Radio de detección ajustable
+    public LayerMask magnetLayerMask; // Asignar en el inspector
+	[Header("Raycast Settings")]
+	public float raycastMaxDistance = 2f; // Distancia ajustable desde el Inspector
+	public LayerMask raycastObstacleLayer; // Capa de obstáculos (asignar en el Inspector)
+	private bool isRaycastOccupation = false; // Variable de clase
+
+
+    void Awake()
+    {
+        // Asegurar que solo existe una instancia
+        if (Instance == null)
+        {
+            Instance = this;
+            // Inicialización temprana
+            Debug.Log("MagnetSystem inicializado correctamente");
+        }
+        else
+        {
+            Destroy(gameObject);
+        }
+    }
+	
+	public bool IsAnyPieceBeingConnected()
+    {
+        return isConnectingInProgress || CurrentlySelectedPiece != null;
+    }
+	
+	public void EndConnectionProcess()
+    {
+        isConnectingInProgress = false;
+        CurrentlySelectedPiece = null;
+    }
+	
+	public void StartConnectionProcess()
+    {
+        isConnectingInProgress = true;
+    }
+	
+	public void SetSelectedPiece(HexagonPiece piece)
+    {
+        CurrentlySelectedPiece = piece;
+    }
+
+    public void ClearSelection()
+    {
+        CurrentlySelectedPiece = null;
+    }
+	
+	public void HighlightAvailableMagnets()
+	{
+		foreach (Transform magnet in allMagnets)
+		{
+			
+			bool isAvailable = magnetAvailability[magnet];
+			SetMagnetVisibility(magnet, isAvailable); // Todos los imanes siguen la misma regla
+		}
+	}
+	
+	public List<string> GetAdjacentMagnets(string magnetName)
+{
+    if (adjacentMagnets.ContainsKey(magnetName))
+    {
+        return adjacentMagnets[magnetName];
+    }
+    return new List<string>();
+}
+
+    public void RegisterPiece(HexagonPiece piece, List<Transform> pieceMagnets)
+	{
+		Debug.Log($"Registrando pieza: {piece.name}");
+		
+		foreach (Transform magnet in pieceMagnets)
+		{
+			if (!allMagnets.Contains(magnet))
+			{
+				allMagnets.Add(magnet);
+				magnetAvailability[magnet] = true;
+				magnetToPieceMap[magnet] = piece;
+				
+				// Forzar actualización visual inicial
+				SetMagnetColor(magnet, availableColor);
+			}
+		}
+	}
+
+    public void OccupyMagnet(Transform magnet)
+	{
+		if (magnetAvailability.ContainsKey(magnet))
+		{
+			magnetAvailability[magnet] = false;
+			SetMagnetVisibility(magnet, false); // Hacer invisible
+			
+			// Debug para verificar el estado
+			HexagonPiece piece = GetPieceForMagnet(magnet);
+			
+		}
+	}
+
+    public bool IsMagnetAvailable(Transform magnet)
+	{
+		// Los imanes del cubo principal deben respetar su disponibilidad real
+		if (magnetAvailability.TryGetValue(magnet, out bool isAvailable))
+		{
+			return isAvailable;
+		}
+		return false;
+	}
+	
+	// Asegúrate que HighlightAvailableMagnets se llama después de cada cambio
+	public void OccupyMagnetAndAdjacents(Transform magnet)
+	{
+		StartConnectionProcess();
+		if (magnetAvailability.ContainsKey(magnet))
+		{
+			HexagonPiece piece = magnetToPieceMap[magnet];
+			
+			// Comportamiento idéntico para todos los imanes (principal y secundarios)
+			OccupyMagnet(magnet);
+			
+			// Solo bloquear adyacentes para cubos secundarios
+			if (piece == null || !piece.isMainPiece)
+			{
+				string magnetName = magnet.name;
+				if (adjacentMagnets.ContainsKey(magnetName))
+				{
+					foreach (string adjacentName in adjacentMagnets[magnetName])
+					{
+						Transform adjacentMagnet = magnet.parent.Find(adjacentName);
+						if (adjacentMagnet != null && magnetAvailability.ContainsKey(adjacentMagnet))
+						{
+							HexagonPiece adjacentPiece = magnetToPieceMap[adjacentMagnet];
+							if (adjacentPiece == null || !adjacentPiece.isMainPiece)
+							{
+								OccupyMagnet(adjacentMagnet);
+							}
+						}
+					}
+				}
+			}
+		}
+		OccupyMagnet(magnet);
+        
+        // Actualizar ocupación por conexiones físicas
+        //UpdateMagnetOccupancyFromPhysics();
+		HighlightAvailableMagnets();
+	}
+	
+	public bool IsMainPieceMagnet(Transform magnet)
+	{
+		if (magnetToPieceMap.TryGetValue(magnet, out HexagonPiece piece))
+		{
+			return piece.isMainPiece;
+		}
+		return false;
+	}
+	
+	public void UpdateMagnetOccupancyFromPhysics()
+    {
+        foreach (Transform magnet in allMagnets)
+        {
+            // Solo verificar imanes lógicamente disponibles
+            if (magnetAvailability[magnet] == true)
+            {
+                bool isPhysicallyOccupied = CheckPhysicalOccupation(magnet);
+                if (isPhysicallyOccupied)
+                {
+                    OccupyMagnet(magnet);
+                    Debug.Log($"Iman {magnet.name} ocupado físicamente (conexión indirecta)");
+                }
+            }
+        }
+    }
+
+    public bool CheckPhysicalOccupation(Transform magnet)
+	{
+		// 1. Verificar primero el estado lógico
+		if (!magnetAvailability[magnet])
+			return true;
+
+		// 2. Verificación física mejorada
+		float checkRadius = magnet.GetComponent<Collider>().bounds.extents.magnitude;
+		Collider[] hitColliders = Physics.OverlapSphere(
+			magnet.position, 
+			checkRadius, 
+			magnetLayerMask.value,
+			QueryTriggerInteraction.Ignore
+		);
+		
+		bool physicallyOccupied = false;
+		foreach (var collider in hitColliders)
+		{
+			if (collider.transform != magnet && 
+				magnetToPieceMap.ContainsKey(collider.transform))
+			{
+				physicallyOccupied = true;
+				break;
+			}
+		}
+			Debug.DrawRay(magnet.position, magnet.forward * raycastMaxDistance, Color.cyan);
+			// 3. **Nuevo: Verificación por Raycast (obstáculos en línea recta)**
+			Ray ray = new Ray(magnet.position, magnet.forward);
+			if (Physics.Raycast(ray, out RaycastHit hit, raycastMaxDistance, raycastObstacleLayer))
+			{
+				if (IsObstacleValid(magnet, hit.collider)) // Solo si el obstáculo es válido
+				{
+					Debug.Log($"Obstáculo válido detectado: {hit.collider.name}", hit.collider.gameObject);
+					
+					isRaycastOccupation = true;
+				}
+			}
+		// Si está ocupado físicamente, bloquear adyacentes
+		if (physicallyOccupied)
+		{
+			OccupyAdjacentMagnets(magnet);
+		}
+		if (isRaycastOccupation)
+		{
+			OccupyMagnet(magnet);;
+		}
+		isRaycastOccupation = false; // Resetear el flag
+		return physicallyOccupied;
+	}
+	
+	private bool IsObstacleValid(Transform magnet, Collider obstacleCollider)
+	{
+		// Excluir: 
+		// 1. El propio imán emisor.
+		// 2. Imanes del mismo HexagonPiece.
+		if (obstacleCollider.transform == magnet) 
+			return false;
+
+		HexagonPiece emitterPiece = magnetToPieceMap[magnet];
+		HexagonPiece hitPiece = magnetToPieceMap.ContainsKey(obstacleCollider.transform) 
+							   ? magnetToPieceMap[obstacleCollider.transform] 
+							   : null;
+
+		return hitPiece == null || hitPiece != emitterPiece;
+	}
+	
+	// Nuevo método para ocupar imanes adyacentes
+	private void OccupyAdjacentMagnets(Transform magnet)
+	{
+		HexagonPiece piece = GetPieceForMagnet(magnet);
+		
+		// Solo bloquear adyacentes para piezas secundarias
+		if (piece == null || !piece.isMainPiece)
+		{
+			string magnetName = magnet.name;
+			if (adjacentMagnets.ContainsKey(magnetName))
+			{
+				foreach (string adjacentName in adjacentMagnets[magnetName])
+				{
+					Transform adjacentMagnet = magnet.parent.Find(adjacentName);
+					if (adjacentMagnet != null && magnetAvailability.ContainsKey(adjacentMagnet))
+					{
+						HexagonPiece adjacentPiece = GetPieceForMagnet(adjacentMagnet);
+						if (adjacentPiece == null || !adjacentPiece.isMainPiece)
+						{
+							OccupyMagnet(adjacentMagnet);
+						}
+					}
+				}
+			}
+		}
+	}
+	
+	private Transform FindMagnetByName(Transform parent, string magnetName)
+    {
+        foreach (Transform child in parent)
+        {
+            if (child.name == magnetName)
+            {
+                return child;
+            }
+        }
+        return null;
+    }
+
+    public HexagonPiece GetPieceForMagnet(Transform magnet)
+    {
+        return magnetToPieceMap.ContainsKey(magnet) ? magnetToPieceMap[magnet] : null;
+    }
+
+    private void SetMagnetVisibility(Transform magnet, bool isVisible)
+	{
+		MeshRenderer renderer = magnet.GetComponent<MeshRenderer>();
+		if (renderer != null)
+		{
+			renderer.enabled = isVisible; // True = visible, False = invisible
+		}
+		else
+		{
+			Debug.LogWarning($"No MeshRenderer found on magnet: {magnet.name}");
+		}
+	}
+	private void SetMagnetColor(Transform magnet, Color color)
+	{
+		Renderer renderer = magnet.GetComponent<Renderer>();
+		if (renderer != null)
+		{
+			renderer.material.color = color;
+		}
+	}
+	public void ForceDisableMagnet(Transform magnet)
+	{
+		if (magnetAvailability.ContainsKey(magnet))
+		{
+			magnetAvailability[magnet] = false;
+			SetMagnetVisibility(magnet, false); // Oculta el imán
+			Debug.Log($"Imán {magnet.name} deshabilitado por salir del límite");
+		}
+	}
+}

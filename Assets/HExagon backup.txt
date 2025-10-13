@@ -1,0 +1,335 @@
+using UnityEngine;
+using System.Collections.Generic;
+using System.Collections;
+
+public class HexagonPiece : MonoBehaviour
+{
+    [Header("Special Pieces")]
+	public bool isMainPiece = false;
+	public bool isStealCardPiece = false;
+    public Color hiddenColor = Color.blue;
+    
+    private List<Transform> hexagonMagnets = new List<Transform>();
+    private bool isConnected = false;
+    private Dictionary<string, string> magnetConnections = new Dictionary<string, string>()
+    {
+        {"Magnet_1", "Magnet_2"}, {"Magnet_2", "Magnet_1"},
+        {"Magnet_3", "Magnet_4"}, {"Magnet_4", "Magnet_3"},
+        {"Magnet_5", "Magnet_6"}, {"Magnet_6", "Magnet_5"}
+    };
+	private bool isFlipped = false;
+    private bool isAnimating = false;
+	[SerializeField] private Renderer[] coloredRenderers; // Asignar los 3 renderers en el inspector
+
+	[Header("Material Settings")]
+    public int targetMaterialIndex = 2;
+    private Material targetMaterial;
+    private Color originalColor;
+    private Color pieceHiddenColor; // Nuevo: almacena el color asignado
+
+    void Awake()
+	{
+		// Obtener el material que vamos a modificar
+        Renderer renderer = GetComponent<Renderer>();
+        if (renderer != null && renderer.materials.Length > targetMaterialIndex)
+        {
+            // Crear una instancia única del material
+            Material[] mats = renderer.materials;
+            mats[targetMaterialIndex] = new Material(mats[targetMaterialIndex]);
+            renderer.materials = mats;
+            
+            targetMaterial = mats[targetMaterialIndex];
+            originalColor = targetMaterial.color;
+            
+            // Inicialmente establecer como negro
+            targetMaterial.color = Color.black;
+        }
+        
+        FindAndAssignHexagonMagnets();
+		
+		// Posponer la inicialización si MagnetSystem no está listo
+		if (isMainPiece)
+		{
+			StartCoroutine(InitializeMainPiece());
+		}
+	}
+
+	System.Collections.IEnumerator InitializeMainPiece()
+	{
+		// Esperar hasta que MagnetSystem esté listo
+		while (MagnetSystem.Instance == null)
+		{
+			yield return null;
+		}
+		
+		Debug.Log($"Inicializando pieza principal: {gameObject.name}");
+		MagnetSystem.Instance.RegisterPiece(this, hexagonMagnets);
+		
+		// Forzar color verde inicial
+		foreach (Transform magnet in hexagonMagnets)
+		{
+			SetMagnetColor(magnet, MagnetSystem.Instance.availableColor);
+		}
+	}
+
+    void FindAndAssignHexagonMagnets()
+	{
+		hexagonMagnets.Clear();
+		
+		// Buscar en todos los hijos recursivamente
+		foreach (Transform child in transform.GetComponentsInChildren<Transform>())
+		{
+			if (child.name.StartsWith("Magnet_"))
+			{
+				hexagonMagnets.Add(child);
+				child.gameObject.layer = LayerMask.NameToLayer("Magnets");
+				
+				// Asegurar que tienen los componentes necesarios
+				if (child.GetComponent<Collider>() == null)
+				{
+					child.gameObject.AddComponent<SphereCollider>();
+				}
+				
+				if (child.GetComponent<Renderer>() == null)
+				{
+					Debug.LogError($"El imán {child.name} no tiene componente Renderer");
+				}
+			}
+		}
+		
+		if (hexagonMagnets.Count == 0)
+		{
+			Debug.LogError("No se encontraron imanes en el modelo FBX");
+		}
+		
+		hexagonMagnets.Sort((a, b) => a.name.CompareTo(b.name));
+	}
+
+    void OnMouseDown()
+    {
+        // Solo procesar si:
+        // - No es la pieza principal
+        // - No está ya conectada
+        // - No está ya volteada
+        // - No hay otra pieza seleccionada
+        // - No hay ninguna pieza actualmente en proceso de conexión
+        if (!isMainPiece && !isConnected && !isFlipped && !isAnimating && 
+            MagnetSystem.Instance.CanSelectPiece && !MagnetSystem.Instance.IsAnyPieceBeingConnected())
+        {
+            StartCoroutine(FlipPiece());
+        }
+    }
+	
+	IEnumerator FlipPiece()
+    {
+        isAnimating = true;
+        float duration = 0.8f;
+        float elapsed = 0f;
+        Quaternion startRotation = transform.rotation;
+        Quaternion endRotation = Quaternion.Euler(0, 0, 0);
+		
+
+        // Cambiar a color asignado al inicio de la animación
+        if (targetMaterial != null)
+        {
+            targetMaterial.color = pieceHiddenColor;
+        }
+
+        while (elapsed < duration)
+        {
+            transform.rotation = Quaternion.Slerp(startRotation, endRotation, elapsed / duration);
+            elapsed += Time.deltaTime;
+            yield return null;
+        }
+
+        transform.rotation = endRotation;
+        isFlipped = true;
+        isAnimating = false;
+        
+        // No necesitamos Reveal() aquí ya que el color ya está cambiado
+        //MagnetSystem.Instance.SetSelectedPiece(this);
+		StartCoroutine(SelectMagnet());
+    }
+	
+	public void SetMagnetsVisibility(bool isVisible)
+	{
+		foreach (Transform magnet in hexagonMagnets)
+		{
+			MeshRenderer renderer = magnet.GetComponent<MeshRenderer>();
+			if (renderer != null)
+			{
+				// Solo mostrar imanes DISPONIBLES (si esVisible = true)
+				bool isAvailable = MagnetSystem.Instance.IsMagnetAvailable(magnet);
+				renderer.enabled = isVisible && isAvailable;
+			}
+		}
+	}
+	public void SetHiddenColor(Color color)
+    {
+		if (isStealCardPiece) return; // No cambies el color si es una pieza "robar carta"
+        pieceHiddenColor = color; // Almacenar el color asignado
+        // No cambiar el material todavía, solo guardar la referencia
+    }
+
+    System.Collections.IEnumerator SelectMagnet()
+	{
+		MagnetSystem.Instance.SetSelectedPiece(this);
+		MagnetSystem.Instance.StartConnectionProcess();
+		Transform targetMagnet = null;
+		
+		
+		while (targetMagnet == null)
+		{
+			if (Input.GetMouseButtonDown(0))
+			{
+				Ray ray = Camera.main.ScreenPointToRay(Input.mousePosition);
+				if (Physics.Raycast(ray, out RaycastHit hit, 100, LayerMask.GetMask("Magnets")))
+				{
+					// Verificar disponibilidad REAL (incluyendo imanes principales ocupados)
+					if (MagnetSystem.Instance.IsMagnetAvailable(hit.transform))
+					{
+						targetMagnet = hit.transform;
+						string targetMagnetName = targetMagnet.name;
+						string hexagonMagnetName = magnetConnections[targetMagnetName];
+						Transform hexagonMagnet = FindCorrespondingHexagonMagnet(targetMagnetName);
+						
+						if (hexagonMagnet != null)
+						{
+							// Registrar el cubo móvil en el sistema
+							MagnetSystem.Instance.RegisterPiece(this, hexagonMagnets);
+							
+							// Ocupar los imanes necesarios
+							MagnetSystem.Instance.OccupyMagnetAndAdjacents(targetMagnet);
+							MagnetSystem.Instance.OccupyMagnetAndAdjacents(hexagonMagnet);
+							
+							isConnected = true;
+							
+							yield return StartCoroutine(MoveToConnectMagnets(targetMagnet, hexagonMagnet));
+						}
+					}
+					else
+					{
+						Debug.Log($"Iman {hit.transform.name} no disponible (ya ocupado)");
+					}
+				}
+			}
+			yield return null;
+		}
+		MagnetSystem.Instance.EndConnectionProcess();
+		MagnetSystem.Instance.ClearSelection();
+		MagnetSystem.Instance.UpdateMagnetOccupancyFromPhysics();
+		GameBoundary.Instance.CheckBoundaries();
+		
+	}
+	// Nuevo método para actualización visual precisa
+	void UpdateMagnetColors(Transform magnet)
+	{
+		HexagonPiece piece = MagnetSystem.Instance.GetPieceForMagnet(magnet);
+		
+		// Comportamiento especial para imanes del cubo principal
+		if (piece != null && piece.isMainPiece)
+		{
+			bool isAvailable = MagnetSystem.Instance.IsMagnetAvailable(magnet);
+			SetMagnetColor(magnet, isAvailable ? MagnetSystem.Instance.availableColor : MagnetSystem.Instance.occupiedColor);
+			return;
+		}
+
+		// Comportamiento normal para cubos secundarios
+		SetMagnetColor(magnet, MagnetSystem.Instance.occupiedColor);
+		
+		string magnetName = magnet.name;
+		foreach (string adjacentName in MagnetSystem.Instance.GetAdjacentMagnets(magnetName))
+		{
+			Transform adjacent = magnet.parent.Find(adjacentName);
+			if (adjacent != null)
+			{
+				HexagonPiece adjacentPiece = MagnetSystem.Instance.GetPieceForMagnet(adjacent);
+				if (adjacentPiece == null || !adjacentPiece.isMainPiece)
+				{
+					SetMagnetColor(adjacent, MagnetSystem.Instance.occupiedColor);
+				}
+			}
+		}
+	}
+	
+	
+
+	// Añade este método a la clase HexagonPiece
+	private void SetMagnetColor(Transform magnet, Color color)
+	{
+		Renderer renderer = magnet.GetComponent<Renderer>();
+		if (renderer != null)
+		{
+			renderer.material.color = color;
+		}
+	}
+
+    Transform FindCorrespondingHexagonMagnet(string mainMagnetName)
+    {
+        if (magnetConnections.TryGetValue(mainMagnetName, out string hexagonMagnetName))
+        {
+            foreach (Transform magnet in hexagonMagnets)
+            {
+                if (magnet.name == hexagonMagnetName)
+                {
+                    return magnet;
+                }
+            }
+        }
+        return null;
+    }
+
+    System.Collections.IEnumerator MoveToConnectMagnets(Transform targetMagnet, Transform hexagonMagnet)
+    {
+        Vector3 connectionOffset = hexagonMagnet.position - transform.position;
+        Vector3 targetPosition = targetMagnet.position - connectionOffset;
+        
+        float duration = 1f;
+        float elapsed = 0;
+        Vector3 startPos = transform.position;
+		// Desactivar colliders temporalmente durante el movimiento
+		SetCollidersEnabled(false);
+        
+        while (elapsed < duration)
+        {
+            transform.position = Vector3.Lerp(startPos, targetPosition, elapsed / duration);
+            elapsed += Time.deltaTime;
+            yield return null;
+        }
+        
+        transform.position = targetPosition;
+		// Reactivar colliders
+		SetCollidersEnabled(true);
+		// Forzar actualización de ocupación después del movimiento
+		SetMagnetsVisibility(true);
+        MagnetSystem.Instance.UpdateMagnetOccupancyFromPhysics();
+    }
+	
+	void SetCollidersEnabled(bool enabled)
+	{
+		foreach (Transform magnet in hexagonMagnets)
+		{
+			Collider col = magnet.GetComponent<Collider>();
+			if (col != null)
+			{
+				col.enabled = enabled;
+			}
+		}
+	}
+
+	Vector3 CalculateRelativeRotation(Transform targetMagnet, Transform hexagonMagnet)
+	{
+		// Obtener las rotaciones locales de los imanes
+		Vector3 targetLocalRot = targetMagnet.localEulerAngles;
+		Vector3 hexagonLocalRot = hexagonMagnet.localEulerAngles;
+		
+		// Calcular rotación necesaria para alinear los imanes
+		Vector3 relativeRot = new Vector3(
+			targetLocalRot.x - hexagonLocalRot.x,
+			targetLocalRot.y - hexagonLocalRot.y, // 180 grados de diferencia base
+			targetLocalRot.z - hexagonLocalRot.z
+		);
+		
+		return relativeRot;
+	}
+}

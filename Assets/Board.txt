@@ -1,0 +1,171 @@
+using UnityEngine;
+using System.Collections.Generic;
+
+public class HexagonalBoardGenerator : MonoBehaviour
+{
+    [Header("Settings")]
+    public GameObject hexagonPiecePrefab;
+    public int rows = 4; // Total de filas (56 piezas / 8 por fila = 7 filas)
+    public int piecesPerRow = 4;
+    public float xOffset = 1.5f; // Distancia horizontal entre piezas
+    public float zOffset = 1.3f; // Distancia vertical entre piezas (ajustada para hexágonos)
+	public bool startUpsideDown = true; // Nuevo: control para empezar boca abajo
+	public GameObject hexagonStealCardPrefab; // Mismo prefab pero con isStealCardPiece = true
+	public int stealCardHexagonCount = 2;
+	
+	[Header("Color Settings")]
+    public ColorSettings colorSettings;
+    
+    private Dictionary<Color, int> colorCounts = new Dictionary<Color, int>();
+    private List<Color> shuffledColors = new List<Color>();
+	public GameObject playerPrefab; // Asigna el MISMO prefab aquí también
+
+    void Start()
+    {
+		InitializeColorDistribution();
+        GenerateHexagonalBoard();
+		InstanciarJugadores();
+    }
+	
+	void InstanciarJugadores()
+	{
+		// Obtener los colores disponibles para jugadores
+		List<Color> playerColors = colorSettings.availableColors;
+		
+		// Instanciar jugadores con colores asignados
+		for (int i = 0; i < Menu.cantidadJugadoresAEinstanciar; i++)
+		{
+			Vector3 spawnPosition = new Vector3(i * 2f, 0, 0);
+			GameObject player = Instantiate(playerPrefab, spawnPosition, Quaternion.identity);
+			
+			// Asignar color al jugador
+			if (i < playerColors.Count)
+			{
+				PlayerTotem playerTotem = player.GetComponent<PlayerTotem>();
+				if (playerTotem != null)
+				{
+					playerTotem.playerID = i + 1; // IDs comienzan en 1
+					playerTotem.playerColor = playerColors[i];
+					playerTotem.ApplyColor(playerColors[i]);
+				}
+			}
+		}
+	}
+	
+	void InitializeColorDistribution()
+	{
+		// Calcula cuántas piezas negras necesitamos
+		int totalColoredPieces = colorSettings.availableColors.Count * colorSettings.piecesPerColor;
+		int blackPiecesCount = 10 - totalColoredPieces;
+
+
+		// Crea una lista con todos los colores necesarios
+		List<Color> allPieceColors = new List<Color>();
+		
+		// Añade 5 piezas por cada color
+		foreach (Color color in colorSettings.availableColors)
+		{
+			for (int i = 0; i < colorSettings.piecesPerColor; i++)
+			{
+				allPieceColors.Add(color);
+			}
+		}
+		
+		// Añade las piezas negras
+		for (int i = 0; i < blackPiecesCount; i++)
+		{
+			allPieceColors.Add(colorSettings.hiddenColor);
+		}
+		
+		// Mezcla aleatoriamente
+		shuffledColors = ShuffleList(allPieceColors);
+	}
+
+	List<Color> ShuffleList(List<Color> list)
+	{
+		for (int i = 0; i < list.Count; i++)
+		{
+			Color temp = list[i];
+			int randomIndex = Random.Range(i, list.Count);
+			list[i] = list[randomIndex];
+			list[randomIndex] = temp;
+		}
+		return list;
+	}
+	
+	void ShuffleColors()
+    {
+        for (int i = 0; i < shuffledColors.Count; i++)
+        {
+            Color temp = shuffledColors[i];
+            int randomIndex = Random.Range(i, shuffledColors.Count);
+            shuffledColors[i] = shuffledColors[randomIndex];
+            shuffledColors[randomIndex] = temp;
+        }
+    }
+
+    void GenerateHexagonalBoard()
+    {
+        List<GameObject> allPieces = new List<GameObject>();
+        int colorIndex = 0;
+
+        // 1. Genera TODAS las piezas (normales + potenciales "robar carta")
+        int totalPieces = rows * piecesPerRow; // Ajusta según tu cálculo real
+        List<Vector3> positions = new List<Vector3>();
+
+        // Primero: Calcula todas las posiciones posibles
+        for (int row = 0; row < rows; row++)
+        {
+            int piecesInThisRow = (row % 2 == 0) ? piecesPerRow : piecesPerRow - 1;
+            float rowXOffset = (row % 2 == 0) ? 0f : xOffset * 0.5f;
+
+            for (int col = 0; col < piecesInThisRow; col++)
+            {
+                Vector3 position = new Vector3(col * xOffset + rowXOffset, 0, row * zOffset);
+                positions.Add(position);
+            }
+        }
+
+        // Baraja las posiciones para mezclarlas aleatoriamente
+        ShufflePositions(positions);
+
+        // Segundo: Instancia las piezas
+        for (int i = 0; i < positions.Count; i++)
+        {
+            Quaternion rotation = startUpsideDown ? Quaternion.Euler(180, 0, 0) : Quaternion.identity;
+            GameObject piecePrefab = (i < stealCardHexagonCount) ? hexagonStealCardPrefab : hexagonPiecePrefab;
+
+            GameObject newPiece = Instantiate(piecePrefab, positions[i], rotation, transform);
+            newPiece.name = $"HexagonPiece_{i}";
+            allPieces.Add(newPiece);
+
+            HexagonPiece pieceComponent = newPiece.GetComponent<HexagonPiece>();
+            if (pieceComponent != null)
+            {
+                // Configuración específica
+                if (i < stealCardHexagonCount)
+                {
+                    pieceComponent.isStealCardPiece = true;
+                }
+                else if (colorIndex < shuffledColors.Count)
+                {
+                    pieceComponent.SetHiddenColor(shuffledColors[colorIndex]);
+                    colorIndex++;
+                }
+                pieceComponent.SetMagnetsVisibility(false);
+            }
+        }
+    }
+
+    // Método para barajar posiciones
+    void ShufflePositions(List<Vector3> list)
+    {
+        for (int i = 0; i < list.Count; i++)
+        {
+            Vector3 temp = list[i];
+            int randomIndex = Random.Range(i, list.Count);
+            list[i] = list[randomIndex];
+            list[randomIndex] = temp;
+        }
+    }
+}
