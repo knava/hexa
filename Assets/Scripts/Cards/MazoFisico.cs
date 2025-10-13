@@ -660,11 +660,12 @@ public class MazoFisico : MonoBehaviour
 			// ✅ CORRECCIÓN: Reorganizar la mano de la víctima inmediatamente
 			manoVictima.ReorganizarMano();
 			
-			// Actualizar escala solo si cambia el tipo de dueño (IA->Humano o Humano->IA)
+			// ✅ ACTUALIZAR: Cambiar escala solo si cambia el tipo de dueño
 			Carta3D cartaScript = carta.GetComponent<Carta3D>();
-			if (cartaScript != null && victimaEsIA != atacanteEsIA)
+			if (cartaScript != null)
 			{
-				cartaScript.CambiarEscala(atacanteEsIA);
+				// Siempre actualizar el estado, pero solo cambiar escala si es necesario
+				cartaScript.SetEnManoIA(atacanteEsIA);
 			}
 			
 			// Agregar carta a la mano del atacante

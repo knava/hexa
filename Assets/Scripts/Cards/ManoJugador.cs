@@ -13,6 +13,11 @@ public class ManoJugador : MonoBehaviour
     [Header("Escalas de Cartas")]
     public Vector3 escalaMazoYJugador = new Vector3(1.2f, 1.6f, 2f);
     public Vector3 escalaIA = new Vector3(0.84f, 1.12f, 1.4f);
+	
+	[Header("Selección para Dinamita")]
+	public HashSet<GameObject> CartasSeleccionadasParaDinamita { get; private set; } = new HashSet<GameObject>();
+	private int maxCartasParaSeleccionar = 0;
+	public bool seleccionDinamitaHabilitada = false;
 
     private List<GameObject> cartasEnMano = new List<GameObject>();
     private MazoFisico mazo;
@@ -60,6 +65,86 @@ public class ManoJugador : MonoBehaviour
 
         ReorganizarMano();
     }
+	
+	public void HabilitarCartasParaSeleccionDinamita(int maxSeleccion)
+	{
+		maxCartasParaSeleccionar = maxSeleccion;
+		seleccionDinamitaHabilitada = true;
+		CartasSeleccionadasParaDinamita.Clear();
+		
+		Debug.Log($"🎯 Habilitada selección de hasta {maxSeleccion} cartas para Dinamita");
+		
+		// Aplicar efecto visual a las cartas
+		foreach (GameObject carta in cartasEnMano)
+		{
+			if (carta != null)
+			{
+				// Feedback visual para indicar que son seleccionables
+				LeanTween.moveLocal(carta, carta.transform.localPosition + Vector3.up * 0.3f, 0.3f)
+					.setEase(LeanTweenType.easeOutBack);
+			}
+		}
+	}
+
+	// NUEVO: Método para manejar clic en carta durante selección de Dinamita
+	public void ProcesarClicCartaDinamita(GameObject carta)
+	{
+		if (!seleccionDinamitaHabilitada) return;
+		
+		Carta3D cartaScript = carta.GetComponent<Carta3D>();
+		if (cartaScript == null) return;
+		
+		if (CartasSeleccionadasParaDinamita.Contains(carta))
+		{
+			// Deseleccionar carta
+			CartasSeleccionadasParaDinamita.Remove(carta);
+			cartaScript.EstaSeleccionada = false;
+			Debug.Log($"🔴 Carta deseleccionada para Dinamita - Total: {CartasSeleccionadasParaDinamita.Count}/{maxCartasParaSeleccionar}");
+			
+			// Efecto visual de deselección
+			LeanTween.moveLocal(carta, Vector3.zero, 0.2f)
+				.setEase(LeanTweenType.easeOutBack);
+		}
+		else if (CartasSeleccionadasParaDinamita.Count < maxCartasParaSeleccionar)
+		{
+			// Seleccionar carta
+			CartasSeleccionadasParaDinamita.Add(carta);
+			cartaScript.EstaSeleccionada = true;
+			Debug.Log($"🟢 Carta seleccionada para Dinamita - Total: {CartasSeleccionadasParaDinamita.Count}/{maxCartasParaSeleccionar}");
+			
+			// Efecto visual de selección
+			LeanTween.moveLocal(carta, carta.transform.localPosition + Vector3.up * 0.5f, 0.2f)
+				.setEase(LeanTweenType.easeOutBack);
+		}
+		else
+		{
+			Debug.Log($"⚠️ Ya has seleccionado el máximo de {maxCartasParaSeleccionar} cartas");
+		}
+	}
+
+	// NUEVO: Método para limpiar selección de Dinamita
+	public void LimpiarSeleccionDinamita()
+	{
+		foreach (GameObject carta in CartasSeleccionadasParaDinamita)
+		{
+			Carta3D cartaScript = carta.GetComponent<Carta3D>();
+			if (cartaScript != null)
+			{
+				cartaScript.EstaSeleccionada = false;
+			}
+			
+			// Restaurar posición original
+			LeanTween.moveLocal(carta, Vector3.zero, 0.3f)
+				.setEase(LeanTweenType.easeOutBack);
+		}
+		
+		CartasSeleccionadasParaDinamita.Clear();
+		seleccionDinamitaHabilitada = false;
+		maxCartasParaSeleccionar = 0;
+	}
+
+	// NUEVO: Modificar el método OnMouseDown en Carta3D para manejar selección de Dinamita
+	// (Esto se agregaría en Carta3D.cs, pero lo menciono aquí para contexto)
 
     public void ReorganizarMano()
     {
@@ -240,23 +325,37 @@ public class ManoJugador : MonoBehaviour
 
     // Método para remover carta de la mano
     public void RemoverCarta(GameObject carta)
-    {
-        if (cartasEnMano.Contains(carta))
-        {
-            cartasEnMano.Remove(carta);
-            
-            // Si la carta removida era la seleccionada, limpiar la referencia
-            if (cartaSeleccionadaActual == carta)
-            {
-                cartaSeleccionadaActual = null;
-            }
-            
-            // ✅ Asegurar que se reorganiza la mano después de remover
-            ReorganizarMano();
-            
-            Debug.Log($"🗑️ Carta removida de jugador {playerID}. Cartas restantes: {cartasEnMano.Count}");
-        }
-    }
+	{
+		if (cartasEnMano.Contains(carta))
+		{
+			cartasEnMano.Remove(carta);
+			
+			// ✅ Resetear el estado de selección de la carta antes de removerla
+			Carta3D cartaScript = carta.GetComponent<Carta3D>();
+			if (cartaScript != null)
+			{
+				cartaScript.Deseleccionar();
+				cartaScript.SetEnManoIA(false); // Resetear a escala estándar
+			}
+			
+			// Si la carta removida era la seleccionada, limpiar la referencia
+			if (cartaSeleccionadaActual == carta)
+			{
+				cartaSeleccionadaActual = null;
+			}
+			
+			// ✅ Remover de la selección de Dinamita si está ahí
+			if (CartasSeleccionadasParaDinamita.Contains(carta))
+			{
+				CartasSeleccionadasParaDinamita.Remove(carta);
+			}
+			
+			// ✅ Asegurar que se reorganiza la mano después de remover
+			ReorganizarMano();
+			
+			Debug.Log($"🗑️ Carta removida de jugador {playerID}. Cartas restantes: {cartasEnMano.Count}");
+		}
+	}
     
     public bool ContieneCarta(GameObject carta)
     {

@@ -66,13 +66,20 @@ public class Carta3D : MonoBehaviour
 	{
 		Debug.Log("Clic detectado en carta: " + gameObject.name);
 		
-		// Verificar si está en la mano del jugador humano (Jugador 1)
+		// Verificar si está en modo selección de Dinamita
+		ManoJugador mano = GetComponentInParent<ManoJugador>();
+		if (mano != null && mano.seleccionDinamitaHabilitada)
+		{
+			mano.ProcesarClicCartaDinamita(gameObject);
+			return;
+		}
+		
+		// Lógica existente para otros casos...
 		bool esJugadorHumano = EstaEnManoJugador1() && !enManoIA;
 		
 		if (esJugadorHumano)
 		{
-			// NUEVO: Usar el sistema de selección única del ManoJugador
-			ManoJugador mano = GetComponentInParent<ManoJugador>();
+			// Usar el sistema de selección única del ManoJugador
 			if (mano != null)
 			{
 				mano.SeleccionarCarta(gameObject);
@@ -186,21 +193,22 @@ public class Carta3D : MonoBehaviour
     }
     
     public void SetEnManoIA(bool esIA)
-    {
-        enManoIA = esIA;
-        
-        // Actualizar escala inmediatamente
-        if (esIA)
-        {
-            transform.localScale = escalaIA;
-        }
-        else
-        {
-            transform.localScale = escalaHumano;
-        }
-        
-        Debug.Log($"🤖 Carta asignada a {(esIA ? "IA" : "Humano")}");
-    }
+	{
+		enManoIA = esIA;
+		
+		// Actualizar escala inmediatamente
+		if (esIA)
+		{
+			transform.localScale = escalaIA;
+		}
+		else
+		{
+			// ✅ Usar escala estándar cuando no está en mano de IA
+			transform.localScale = escalaHumano;
+		}
+		
+		Debug.Log($"🤖 Carta asignada a {(esIA ? "IA" : "Humano")} - Escala: {transform.localScale}");
+	}
 
     public void CambiarEscala(bool nuevoEsIA)
     {

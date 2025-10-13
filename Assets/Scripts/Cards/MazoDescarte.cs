@@ -26,29 +26,45 @@ public class MazoDescarte : MonoBehaviour
     }
     
     public void AgregarCartaDescarte(GameObject carta)
-    {
-        if (carta == null) return;
-        
-        // Remover de cualquier mano anterior
-        carta.transform.SetParent(transform);
-        
-        // Posicionar la carta en el mazo de descarte
-        Vector3 posicion = posicionDescarte.position + new Vector3(0, cartasDescarte.Count * separacionCartas, 0);
-        carta.transform.position = posicion;
-        carta.transform.rotation = Quaternion.Euler(90, 0, 0);
-        
-        // Mostrar dorso
-        Carta3D cartaScript = carta.GetComponent<Carta3D>();
-        if (cartaScript != null)
-        {
-            cartaScript.MostrarDorso();
-            cartaScript.SetPuedeGirar(false);
-        }
-        
-        cartasDescarte.Add(carta);
-        
-        Debug.Log($"🗑️ Carta agregada al descarte. Total: {cartasDescarte.Count}");
-    }
+	{
+		if (carta == null) return;
+		
+		// Agregar la carta a la lista primero
+		cartasDescarte.Add(carta);
+		
+		// Luego reorganizar TODO el mazo
+		ReorganizarMazoDescarte();
+		
+		// Configurar la carta
+		carta.transform.SetParent(transform);
+		carta.transform.localScale = new Vector3(1.2f, 1.6f, 2f);
+		
+		Carta3D cartaScript = carta.GetComponent<Carta3D>();
+		if (cartaScript != null)
+		{
+			cartaScript.MostrarDorso();
+			cartaScript.SetPuedeGirar(false);
+			cartaScript.SetEnManoIA(false);
+		}
+		
+		Debug.Log($"🗑️ Carta agregada al descarte. Total: {cartasDescarte.Count}");
+	}
+
+	// ✅ MÉTODO PARA REORGANIZAR TODO EL MAZO
+	public void ReorganizarMazoDescarte()
+	{
+		for (int i = 0; i < cartasDescarte.Count; i++)
+		{
+			GameObject carta = cartasDescarte[i];
+			if (carta != null)
+			{
+				carta.transform.SetParent(transform);
+				carta.transform.localPosition = new Vector3(0f, 0f, i * 0.002f);
+				carta.transform.localRotation = Quaternion.Euler(90, 0, 0);
+				carta.transform.localScale = new Vector3(1.2f, 1.6f, 2f);
+			}
+		}
+	}
     
     public int CantidadCartasDescarte()
     {

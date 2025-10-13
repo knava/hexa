@@ -3,6 +3,7 @@ using UnityEngine.UI;
 using TMPro;
 using System.Collections;
 using System.Collections.Generic;
+using System.Linq;
 
 public class GestionBotonesCartas : MonoBehaviour
 {
@@ -350,37 +351,118 @@ public class GestionBotonesCartas : MonoBehaviour
 
     // Método: Ejecutar la lógica de la Dinamita
     private void EjecutarDinamita(int jugadorObjetivoID)
-    {
-        Debug.Log($"💥 EJECUTANDO DINAMITA contra Jugador {jugadorObjetivoID}");
-        
-        // Obtener la mano del jugador objetivo
-        if (MazoFisico.Instance != null && 
-            MazoFisico.Instance.manosJugadores.TryGetValue(jugadorObjetivoID, out ManoJugador manoObjetivo))
-        {
-            int cartasTotales = manoObjetivo.CantidadCartas;
-            
-            // Calcular cuántas cartas descartar (mitad, redondeando hacia arriba)
-            int cartasADescartar = Mathf.CeilToInt(cartasTotales / 2f);
-            
-            Debug.Log($"📊 Jugador {jugadorObjetivoID} tiene {cartasTotales} cartas - A descartar: {cartasADescartar}");
-            
-            if (cartasADescartar > 0)
-            {
-                // Iniciar proceso de descarte
-                StartCoroutine(ProcesoDescarteDinamita(manoObjetivo, cartasADescartar));
-            }
-            else
-            {
-                Debug.Log("⚠️ No hay cartas para descartar");
-                TerminarUsoDinamita();
-            }
-        }
-        else
-        {
-            Debug.LogError($"❌ No se encontró mano del jugador objetivo {jugadorObjetivoID}");
-            TerminarUsoDinamita();
-        }
-    }
+	{
+		Debug.Log($"💥 EJECUTANDO DINAMITA contra Jugador {jugadorObjetivoID}");
+		
+		// Obtener la mano del jugador objetivo
+		if (MazoFisico.Instance != null && 
+			MazoFisico.Instance.manosJugadores.TryGetValue(jugadorObjetivoID, out ManoJugador manoObjetivo))
+		{
+			int cartasTotales = manoObjetivo.CantidadCartas;
+			
+			// Calcular cuántas cartas descartar (mitad, redondeando hacia arriba)
+			int cartasADescartar = Mathf.CeilToInt(cartasTotales / 2f);
+			
+			Debug.Log($"📊 Jugador {jugadorObjetivoID} tiene {cartasTotales} cartas - A descartar: {cartasADescartar}");
+			
+			if (cartasADescartar > 0)
+			{
+				// NUEVO: Iniciar proceso de selección de cartas para descartar
+				IniciarSeleccionCartasParaDescarte(manoObjetivo, cartasADescartar);
+			}
+			else
+			{
+				Debug.Log("⚠️ No hay cartas para descartar");
+				TerminarUsoDinamita();
+			}
+		}
+		else
+		{
+			Debug.LogError($"❌ No se encontró mano del jugador objetivo {jugadorObjetivoID}");
+			TerminarUsoDinamita();
+		}
+	}
+	
+	private void IniciarSeleccionCartasParaDescarte(ManoJugador manoObjetivo, int cartasADescartar)
+	{
+		Debug.Log($"🎯 Iniciando selección de {cartasADescartar} cartas para descartar");
+		
+		// Mostrar mensaje al jugador
+		MostrarMensaje($"Selecciona {cartasADescartar} cartas del Jugador {manoObjetivo.playerID} para descartar");
+		
+		// Habilitar las cartas del jugador objetivo para selección
+		manoObjetivo.HabilitarCartasParaSeleccionDinamita(cartasADescartar);
+		
+		// Iniciar corrutina que espera la selección
+		StartCoroutine(EsperarSeleccionCartas(manoObjetivo, cartasADescartar));
+	}
+	
+	private IEnumerator EsperarSeleccionCartas(ManoJugador manoObjetivo, int cartasADescartar)
+	{
+		// Esperar a que se seleccionen las cartas requeridas
+		while (manoObjetivo.CartasSeleccionadasParaDinamita.Count < cartasADescartar)
+		{
+			yield return null;
+		}
+		
+		Debug.Log($"✅ Selección completada - {cartasADescartar} cartas seleccionadas");
+		
+		// Proceder con el descarte de las cartas seleccionadas
+		ProcesarDescarteDinamita(manoObjetivo);
+	}
+	
+	private void ProcesarDescarteDinamita(ManoJugador manoObjetivo)
+	{
+		Debug.Log($"🗑️ Procesando descarte de cartas seleccionadas...");
+		
+		// Obtener las cartas seleccionadas
+		List<GameObject> cartasSeleccionadas = new List<GameObject>(manoObjetivo.CartasSeleccionadasParaDinamita);
+		
+		// Mover cada carta seleccionada al descarte
+		foreach (GameObject carta in cartasSeleccionadas)
+		{
+			if (MazoDescarte.Instance != null)
+			{
+				// ✅ Asegurar que la carta tenga la escala correcta antes de mover al descarte
+				Carta3D cartaScript = carta.GetComponent<Carta3D>();
+				if (cartaScript != null)
+				{
+					cartaScript.SetEnManoIA(false); // Forzar escala estándar
+				}
+				
+				MazoDescarte.Instance.AgregarCartaDescarte(carta);
+				manoObjetivo.RemoverCarta(carta);
+				Debug.Log($"🗑️ Carta descartada: {carta.name}");
+			}
+		}
+		
+		// Limpiar la selección de dinamita
+		manoObjetivo.LimpiarSeleccionDinamita();
+		
+		// Ocultar mensaje
+		OcultarMensaje();
+		
+		// Terminar el uso de la Dinamita
+		TerminarUsoDinamita();
+	}
+	
+	
+	
+	public void CancelarSeleccionCartas()
+	{
+		if (jugadorObjetivoID != -1)
+		{
+			// Obtener la mano del jugador objetivo
+			if (MazoFisico.Instance != null && 
+				MazoFisico.Instance.manosJugadores.TryGetValue(jugadorObjetivoID, out ManoJugador manoObjetivo))
+			{
+				manoObjetivo.LimpiarSeleccionDinamita();
+			}
+		}
+		
+		OcultarMensaje();
+		Debug.Log("❌ Selección de cartas cancelada");
+	}
 
     // Método: Proceso de descarte con la Dinamita
     private IEnumerator ProcesoDescarteDinamita(ManoJugador manoObjetivo, int cartasADescartar)
