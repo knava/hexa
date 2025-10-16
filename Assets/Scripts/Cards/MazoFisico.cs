@@ -570,7 +570,6 @@ public class MazoFisico : MonoBehaviour
 		Carta3D cartaScript = carta?.GetComponent<Carta3D>();
 		if (cartaScript == null)
 		{
-			//Debug.LogError("❌ Carta o script Carta3D es null");
 			return;
 		}
 		
@@ -579,7 +578,7 @@ public class MazoFisico : MonoBehaviour
 			// Verificar si la carta es del mazo
 			if (cartasMazo.Contains(carta))
 			{
-				//Debug.Log($"🎯 Jugador {jugadorAtacanteID} robó carta del mazo");
+				Debug.Log($"🎯 Jugador {jugadorAtacanteID} robó carta del mazo");
 				RobarCartaDelMazo(carta);
 			}
 			else
@@ -589,8 +588,11 @@ public class MazoFisico : MonoBehaviour
 				{
 					if (manoVictima.ContieneCarta(carta))
 					{
-						//Debug.Log($"🎯 Jugador {jugadorAtacanteID} robó carta del jugador {jugadorVictimaID}");
+						Debug.Log($"🎯 Jugador {jugadorAtacanteID} robó carta del jugador {jugadorVictimaID}");
 						RobarCartaDeMano(carta);
+						
+						// ✅ CORRECCIÓN ADICIONAL: Reorganizar también aquí por si acaso
+						manoVictima.ReorganizarMano();
 					}
 					else
 					{
@@ -602,6 +604,12 @@ public class MazoFisico : MonoBehaviour
 			
 			// Deshabilitar todas las cartas después de robar
 			DeshabilitarRoboPorComer();
+			
+			// ✅ CORRECCIÓN: Asegurar reorganización final
+			if (manosJugadores.TryGetValue(jugadorVictimaID, out ManoJugador manoVictimaFinal))
+			{
+				manoVictimaFinal.ReorganizarMano();
+			}
 			
 			// Finalizar el robo
 			GameManager.Instance?.FinalizarRoboPorComer();
@@ -637,7 +645,14 @@ public class MazoFisico : MonoBehaviour
 				cartaScript.MostrarFrente();
 			}
 			
-			manoAtacante.AgregarCarta(carta);
+			manoAtacante.AgregarCarta(carta); // ✅ ESTE se reorganiza automáticamente
+			
+			// ✅ CORRECCIÓN: REORGANIZAR LA MANO DEL JUGADOR COMIDO
+			if (manosJugadores.TryGetValue(jugadorVictimaID, out ManoJugador manoVictima))
+			{
+				manoVictima.ReorganizarMano();
+				Debug.Log($"🔄 Reorganizada mano del jugador comido {jugadorVictimaID}");
+			}
 			
 			// ✅ VERIFICAR SI EL MAZO ESTÁ VACÍO
 			VerificarYOcultarMazo();
@@ -660,16 +675,17 @@ public class MazoFisico : MonoBehaviour
 			// ✅ CORRECCIÓN: Reorganizar la mano de la víctima inmediatamente
 			manoVictima.ReorganizarMano();
 			
-			// ✅ ACTUALIZAR: Cambiar escala solo si cambia el tipo de dueño
+			// Actualizar escala solo si cambia el tipo de dueño (IA->Humano o Humano->IA)
 			Carta3D cartaScript = carta.GetComponent<Carta3D>();
-			if (cartaScript != null)
+			if (cartaScript != null && victimaEsIA != atacanteEsIA)
 			{
-				// Siempre actualizar el estado, pero solo cambiar escala si es necesario
-				cartaScript.SetEnManoIA(atacanteEsIA);
+				cartaScript.CambiarEscala(atacanteEsIA);
 			}
 			
 			// Agregar carta a la mano del atacante
 			manoAtacante.AgregarCarta(carta);
+			
+			Debug.Log($"✅ Carta robada de jugador {jugadorVictimaID} a jugador {jugadorAtacanteID}");
 		}
 	}
 
