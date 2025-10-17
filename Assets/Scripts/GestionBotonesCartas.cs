@@ -20,6 +20,7 @@ public class GestionBotonesCartas : MonoBehaviour
     
     private ManoJugador manoJugadorActual;
     private GameObject cartaSeleccionada;
+	private bool cartaEnUso = false;
     
     // Estados para la selección de objetivo
     private bool esperandoSeleccionObjetivo = false;
@@ -69,7 +70,11 @@ public class GestionBotonesCartas : MonoBehaviour
     public void ActualizarEstadoBoton()
     {
         // Si estamos en medio de una selección, no actualizar el botón normal
-        if (esperandoSeleccionObjetivo) return;
+        if (esperandoSeleccionObjetivo || cartaEnUso) 
+		{
+			OcultarBotonUtilizar();
+			return;
+		}
 
         // Verificar si es el turno del jugador humano
         bool esTurnoJugador = GameManager.Instance != null && 
@@ -151,7 +156,7 @@ public class GestionBotonesCartas : MonoBehaviour
         if (botonUtilizar != null && botonUtilizar.gameObject.activeInHierarchy)
         {
             botonUtilizar.gameObject.SetActive(false);
-            cartaSeleccionada = null;
+            //cartaSeleccionada = null;
             Debug.Log("❌ Botón UTILIZAR ocultado");
         }
     }
@@ -183,7 +188,7 @@ public class GestionBotonesCartas : MonoBehaviour
 
     public void UtilizarCartaSeleccionada()
     {
-        if (cartaSeleccionada == null)
+        if (cartaSeleccionada == null || cartaEnUso)
         {
             Debug.LogWarning("⚠️ No hay carta seleccionada para utilizar");
             return;
@@ -198,6 +203,8 @@ public class GestionBotonesCartas : MonoBehaviour
 
         Debug.Log($"🎯 Utilizando carta: {cartaScript.GetTipoCarta()}");
         tipoCartaEnUso = cartaScript.GetTipoCarta();
+		
+		cartaEnUso = true;
 
         // Ejecutar la acción según el tipo de carta
         switch (tipoCartaEnUso)
@@ -207,6 +214,7 @@ public class GestionBotonesCartas : MonoBehaviour
                 break;
             default:
                 Debug.LogWarning($"⚠️ Acción no implementada para: {cartaScript.GetTipoCarta()}");
+				cartaEnUso = false;
                 break;
         }
     }
@@ -341,6 +349,7 @@ public class GestionBotonesCartas : MonoBehaviour
         
         esperandoSeleccionObjetivo = false;
         jugadorObjetivoID = -1;
+		cartaEnUso = false;
         
         // Volver a mostrar botón utilizar
         ActualizarEstadoBoton();
@@ -531,6 +540,7 @@ public class GestionBotonesCartas : MonoBehaviour
         }
 
         // Terminar el turno
+		cartaEnUso = false;
         TerminarTurnoDespuesDeUsarCarta();
     }
 
