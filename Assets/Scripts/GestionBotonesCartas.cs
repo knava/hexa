@@ -69,6 +69,12 @@ public class GestionBotonesCartas : MonoBehaviour
 
     public void ActualizarEstadoBoton()
     {
+		// Si es turno de IA, ocultar botón
+		if (GameManager.Instance != null && GameManager.Instance.IsCurrentPlayerAI())
+		{
+			OcultarBotonUtilizar();
+			return;
+		}
         // Si estamos en medio de una selección, no actualizar el botón normal
         if (esperandoSeleccionObjetivo || cartaEnUso) 
 		{
@@ -162,7 +168,7 @@ public class GestionBotonesCartas : MonoBehaviour
     }
 
     // NUEVO: Mostrar solo el texto (no el panel completo)
-    private void MostrarMensaje(string mensaje)
+    public void MostrarMensaje(string mensaje)
     {
         if (textoMensaje != null)
         {
@@ -177,7 +183,7 @@ public class GestionBotonesCartas : MonoBehaviour
     }
 
     // NUEVO: Ocultar solo el texto (no el panel completo)
-    private void OcultarMensaje()
+    public void OcultarMensaje()
     {
         if (textoMensaje != null)
         {

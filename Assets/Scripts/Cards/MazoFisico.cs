@@ -723,4 +723,20 @@ public class MazoFisico : MonoBehaviour
 			}
 		}
 	}
+	
+	public bool TieneCartaDinamita(int playerID)
+	{
+		if (manosJugadores.TryGetValue(playerID, out ManoJugador mano))
+		{
+			foreach (GameObject carta in mano.GetCartas())
+			{
+				Carta3D cartaScript = carta.GetComponent<Carta3D>();
+				if (cartaScript != null && cartaScript.GetTipoCarta() == CardType.Dinamita)
+				{
+					return true;
+				}
+			}
+		}
+		return false;
+	}
 }

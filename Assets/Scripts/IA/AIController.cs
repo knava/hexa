@@ -240,6 +240,16 @@ public class AIController : MonoBehaviour
 
     private IEnumerator ProcessAITurn()
 	{
+		// VERIFICAR CARTAS DE ACCIÓN AL INICIO DEL TURNO
+		EvaluarUsoCartasAccion();
+		
+		// Si usó una carta de acción, el turno termina aquí (pero esperamos a que termine completamente)
+		if (!isMyTurn) 
+		{
+			Debug.Log("🔄 IA usó carta de acción - esperando a que termine completamente...");
+			yield break;
+		}
+		
 		// Esperar a que termine cualquier robo de carta previo
 		while (GameManager.Instance != null && GameManager.Instance.esperandoRoboCarta)
 		{
@@ -442,5 +452,421 @@ public class AIController : MonoBehaviour
 		// Si no puede robar del jugador, robar del mazo
 		Debug.LogWarning("🤖 No puede robar del jugador comido, robando del mazo");
 		RobarCartaDelMazo();
+	}
+	
+	public void EvaluarUsoCartasAccion()
+	{
+		if (!isMyTurn) return;
+		
+		// Verificar si tenemos carta de Dinamita
+		GameObject cartaDinamita = BuscarCartaDinamitaEnMano();
+		if (cartaDinamita == null) return;
+		
+		// Buscar objetivo según criterios
+		int objetivoID = BuscarObjetivoParaDinamita();
+		if (objetivoID != -1)
+		{
+			Debug.Log($"🤖 IA {myTotem.playerID} decide usar Dinamita contra Jugador {objetivoID}");
+			
+			// IMPORTANTE: Cambiar el estado inmediatamente para evitar doble ejecución
+			isMyTurn = false;
+			
+			StartCoroutine(UsarDinamitaContraObjetivo(cartaDinamita, objetivoID));
+		}
+	}
+
+	private GameObject BuscarCartaDinamitaEnMano()
+	{
+		if (MazoFisico.Instance != null && 
+			MazoFisico.Instance.manosJugadores.TryGetValue(myTotem.playerID, out ManoJugador mano))
+		{
+			foreach (GameObject carta in mano.GetCartas())
+			{
+				Carta3D cartaScript = carta.GetComponent<Carta3D>();
+				if (cartaScript != null && cartaScript.GetTipoCarta() == CardType.Dinamita)
+				{
+					return carta;
+				}
+			}
+		}
+		return null;
+	}
+
+	private int BuscarObjetivoParaDinamita()
+	{
+		if (MazoFisico.Instance == null) return -1;
+		
+		int mejorObjetivo = -1;
+		int maxCartas = 3; // Mínimo 4 cartas para usar Dinamita (umbral +1)
+		
+		foreach (var kvp in MazoFisico.Instance.manosJugadores)
+		{
+			int jugadorID = kvp.Key;
+			ManoJugador mano = kvp.Value;
+			
+			// No atacarse a sí mismo
+			if (jugadorID == myTotem.playerID) continue;
+			
+			// Verificar que el objetivo tenga al menos 4 cartas
+			if (mano.CantidadCartas >= 4 && mano.CantidadCartas > maxCartas)
+			{
+				mejorObjetivo = jugadorID;
+				maxCartas = mano.CantidadCartas;
+			}
+		}
+		
+		return mejorObjetivo;
+	}
+
+	private IEnumerator UsarDinamitaContraObjetivo(GameObject cartaDinamita, int objetivoID)
+	{
+		Debug.Log($"💥 IA {myTotem.playerID} ejecutando Dinamita contra Jugador {objetivoID}");
+		
+		// Bloquear el EndTurn automático en GameManager
+		if (GameManager.Instance != null)
+		{
+			GameManager.Instance.bloquearEndTurnAutomatico = true;
+		}
+		
+		// Delay inicial para que el jugador note que la IA está pensando
+		yield return new WaitForSeconds(1.5f);
+		
+		// Seleccionar la carta de Dinamita
+		if (MazoFisico.Instance.manosJugadores.TryGetValue(myTotem.playerID, out ManoJugador manoIA))
+		{
+			manoIA.SeleccionarCarta(cartaDinamita);
+			
+			// Feedback visual: resaltar la carta seleccionada
+			LeanTween.moveLocal(cartaDinamita, cartaDinamita.transform.localPosition + Vector3.up * 0.3f, 0.5f)
+				.setEase(LeanTweenType.easeOutBack);
+		}
+		
+		// Delay para mostrar la carta seleccionada
+		yield return new WaitForSeconds(1f);
+		
+		// Mostrar mensaje en UI (si está disponible)
+		if (GestionBotonesCartas.Instance != null)
+		{
+			GestionBotonesCartas.Instance.MostrarMensaje($"IA Jugador {myTotem.playerID} usa Dinamita contra Jugador {objetivoID}");
+		}
+		
+		// Delay para leer el mensaje
+		yield return new WaitForSeconds(2f);
+		
+		// Resaltar avatar del objetivo
+		if (SistemaAvataresJugadores.Instance != null)
+		{
+			SistemaAvataresJugadores.Instance.ResaltarAvatar(objetivoID, true);
+		}
+		
+		// Delay para ver el objetivo resaltado
+		yield return new WaitForSeconds(1.5f);
+		
+		// Ejecutar la Dinamita
+		yield return StartCoroutine(EjecutarDinamitaIAConDelay(objetivoID));
+		
+		// Quitar resaltado del objetivo
+		if (SistemaAvataresJugadores.Instance != null)
+		{
+			SistemaAvataresJugadores.Instance.ResaltarAvatar(objetivoID, false);
+		}
+		
+		// Mover la carta al descarte con animación
+		if (MazoDescarte.Instance != null && manoIA != null)
+		{
+			// Animación de movimiento al descarte
+			Vector3 posicionOriginal = cartaDinamita.transform.position;
+			Vector3 posicionDescarte = MazoDescarte.Instance.transform.position;
+			
+			LeanTween.move(cartaDinamita, posicionDescarte, 1f)
+				.setEase(LeanTweenType.easeInOutCubic);
+			
+			LeanTween.rotate(cartaDinamita, new Vector3(90f, 0f, 0f), 0.5f);
+			
+			yield return new WaitForSeconds(1f);
+			
+			MazoDescarte.Instance.AgregarCartaDescarte(cartaDinamita);
+			manoIA.RemoverCarta(cartaDinamita);
+		}
+		
+		// Ocultar mensaje
+		if (GestionBotonesCartas.Instance != null)
+		{
+			GestionBotonesCartas.Instance.OcultarMensaje();
+		}
+		
+		// Delay final antes de terminar el turno
+		yield return new WaitForSeconds(1f);
+		
+		// IMPORTANTE: Desbloquear el EndTurn antes de terminar
+		if (GameManager.Instance != null)
+		{
+			GameManager.Instance.bloquearEndTurnAutomatico = false;
+		}
+		
+		// Terminar turno después de usar la carta
+		Debug.Log($"✅ IA {myTotem.playerID} completó uso de Dinamita - terminando turno");
+		GameManager.Instance?.EndTurn();
+	}
+
+	private IEnumerator EjecutarDinamitaIACoroutine(GameObject cartaDinamita, int objetivoID)
+	{
+		Debug.Log($"💥 IA {myTotem.playerID} ejecutando Dinamita contra Jugador {objetivoID}");
+		
+		// Delay inicial para que el jugador note que la IA está pensando
+		yield return new WaitForSeconds(1.5f);
+		
+		// Seleccionar la carta de Dinamita
+		if (MazoFisico.Instance.manosJugadores.TryGetValue(myTotem.playerID, out ManoJugador manoIA))
+		{
+			manoIA.SeleccionarCarta(cartaDinamita);
+			
+			// Feedback visual: resaltar la carta seleccionada
+			LeanTween.moveLocal(cartaDinamita, cartaDinamita.transform.localPosition + Vector3.up * 0.3f, 0.5f)
+				.setEase(LeanTweenType.easeOutBack);
+		}
+		
+		// Delay para mostrar la carta seleccionada
+		yield return new WaitForSeconds(1f);
+		
+		// Mostrar mensaje en UI (si está disponible)
+		if (GestionBotonesCartas.Instance != null)
+		{
+			GestionBotonesCartas.Instance.MostrarMensaje($"IA Jugador {myTotem.playerID} usa Dinamita contra Jugador {objetivoID}");
+		}
+		
+		// Delay para leer el mensaje
+		yield return new WaitForSeconds(2f);
+		
+		// Resaltar avatar del objetivo
+		if (SistemaAvataresJugadores.Instance != null)
+		{
+			SistemaAvataresJugadores.Instance.ResaltarAvatar(objetivoID, true);
+		}
+		
+		// Delay para ver el objetivo resaltado
+		yield return new WaitForSeconds(1.5f);
+		
+		// Ejecutar la Dinamita
+		yield return StartCoroutine(EjecutarDinamitaIAConDelay(objetivoID));
+		
+		// Quitar resaltado del objetivo
+		if (SistemaAvataresJugadores.Instance != null)
+		{
+			SistemaAvataresJugadores.Instance.ResaltarAvatar(objetivoID, false);
+		}
+		
+		// Mover la carta al descarte con animación
+		if (MazoDescarte.Instance != null && manoIA != null)
+		{
+			// Animación de movimiento al descarte
+			Vector3 posicionOriginal = cartaDinamita.transform.position;
+			Vector3 posicionDescarte = MazoDescarte.Instance.transform.position;
+			
+			LeanTween.move(cartaDinamita, posicionDescarte, 1f)
+				.setEase(LeanTweenType.easeInOutCubic);
+			
+			LeanTween.rotate(cartaDinamita, new Vector3(90f, 0f, 0f), 0.5f);
+			
+			yield return new WaitForSeconds(1f);
+			
+			MazoDescarte.Instance.AgregarCartaDescarte(cartaDinamita);
+			manoIA.RemoverCarta(cartaDinamita);
+		}
+		
+		// Ocultar mensaje
+		if (GestionBotonesCartas.Instance != null)
+		{
+			GestionBotonesCartas.Instance.OcultarMensaje();
+		}
+		
+		// Delay final antes de terminar el turno
+		yield return new WaitForSeconds(1f);
+		
+		// Terminar turno después de usar la carta
+		GameManager.Instance?.EndTurn();
+	}
+
+	private void EjecutarDinamitaIA(int jugadorObjetivoID)
+	{
+		if (MazoFisico.Instance != null && 
+			MazoFisico.Instance.manosJugadores.TryGetValue(jugadorObjetivoID, out ManoJugador manoObjetivo))
+		{
+			int cartasTotales = manoObjetivo.CantidadCartas;
+			int cartasADescartar = Mathf.CeilToInt(cartasTotales / 2f);
+			
+			Debug.Log($"🤖 Dinamita IA: Jugador {jugadorObjetivoID} tiene {cartasTotales} cartas - A descartar: {cartasADescartar}");
+			
+			if (cartasADescartar > 0)
+			{
+				// Seleccionar cartas aleatoriamente para descartar
+				List<GameObject> cartasEnMano = manoObjetivo.GetCartas();
+				List<GameObject> cartasADescartarLista = new List<GameObject>();
+				
+				// Barajar las cartas para selección aleatoria
+				for (int i = 0; i < cartasEnMano.Count; i++)
+				{
+					int randomIndex = Random.Range(i, cartasEnMano.Count);
+					GameObject temp = cartasEnMano[i];
+					cartasEnMano[i] = cartasEnMano[randomIndex];
+					cartasEnMano[randomIndex] = temp;
+				}
+				
+				// Tomar las primeras N cartas para descartar
+				for (int i = 0; i < cartasADescartar && i < cartasEnMano.Count; i++)
+				{
+					cartasADescartarLista.Add(cartasEnMano[i]);
+				}
+				
+				// Mover las cartas seleccionadas al descarte
+				foreach (GameObject carta in cartasADescartarLista)
+				{
+					if (MazoDescarte.Instance != null)
+					{
+						MazoDescarte.Instance.AgregarCartaDescarte(carta);
+						manoObjetivo.RemoverCarta(carta);
+						Debug.Log($"🤖 Carta descartada: {carta.name}");
+					}
+				}
+				
+				Debug.Log($"🤖 Dinamita completada: {cartasADescartarLista.Count} cartas descartadas");
+			}
+		}
+	}
+	
+	private IEnumerator EjecutarDinamitaIAConDelay(int jugadorObjetivoID)
+	{
+		if (MazoFisico.Instance != null && 
+			MazoFisico.Instance.manosJugadores.TryGetValue(jugadorObjetivoID, out ManoJugador manoObjetivo))
+		{
+			int cartasTotales = manoObjetivo.CantidadCartas;
+			int cartasADescartar = Mathf.CeilToInt(cartasTotales / 2f);
+			
+			Debug.Log($"🤖 Dinamita IA: Jugador {jugadorObjetivoID} tiene {cartasTotales} cartas - A descartar: {cartasADescartar}");
+			
+			if (cartasADescartar > 0)
+			{
+				// Mostrar mensaje de conteo
+				if (GestionBotonesCartas.Instance != null)
+				{
+					GestionBotonesCartas.Instance.MostrarMensaje($"Descartando {cartasADescartar} cartas del Jugador {jugadorObjetivoID}");
+				}
+				
+				yield return new WaitForSeconds(1.5f);
+				
+				// Seleccionar cartas aleatoriamente para descartar
+				List<GameObject> cartasEnMano = manoObjetivo.GetCartas();
+				List<GameObject> cartasADescartarLista = new List<GameObject>();
+				
+				// Barajar las cartas para selección aleatoria
+				for (int i = 0; i < cartasEnMano.Count; i++)
+				{
+					int randomIndex = Random.Range(i, cartasEnMano.Count);
+					GameObject temp = cartasEnMano[i];
+					cartasEnMano[i] = cartasEnMano[randomIndex];
+					cartasEnMano[randomIndex] = temp;
+				}
+				
+				// Tomar las primeras N cartas para descartar
+				for (int i = 0; i < cartasADescartar && i < cartasEnMano.Count; i++)
+				{
+					cartasADescartarLista.Add(cartasEnMano[i]);
+				}
+				
+				// Descarte con animaciones y delays entre cada carta
+				for (int i = 0; i < cartasADescartarLista.Count; i++)
+				{
+					GameObject carta = cartasADescartarLista[i];
+					
+					if (carta != null && MazoDescarte.Instance != null)
+					{
+						// Efecto visual: resaltar carta a descartar
+						LeanTween.moveLocal(carta, carta.transform.localPosition + Vector3.up * 0.5f, 0.3f)
+							.setEase(LeanTweenType.easeOutBack);
+						
+						// Mostrar mensaje de carta siendo descartada
+						if (GestionBotonesCartas.Instance != null)
+						{
+							Carta3D cartaScript = carta.GetComponent<Carta3D>();
+							if (cartaScript != null)
+							{
+								GestionBotonesCartas.Instance.MostrarMensaje($"Descartando carta {i+1}/{cartasADescartar}");
+							}
+						}
+						
+						yield return new WaitForSeconds(0.8f);
+						
+						// Animación de movimiento al descarte
+						Vector3 posicionDescarte = MazoDescarte.Instance.transform.position;
+						LeanTween.move(carta, posicionDescarte, 0.8f)
+							.setEase(LeanTweenType.easeInOutCubic);
+						
+						LeanTween.rotate(carta, new Vector3(90f, 0f, 0f), 0.5f);
+						
+						yield return new WaitForSeconds(0.8f);
+						
+						// Mover efectivamente al descarte
+						MazoDescarte.Instance.AgregarCartaDescarte(carta);
+						manoObjetivo.RemoverCarta(carta);
+						
+						Debug.Log($"🤖 Carta {i+1}/{cartasADescartar} descartada");
+						
+						// Pequeño delay entre descartes
+						yield return new WaitForSeconds(0.5f);
+					}
+				}
+				
+				// Mensaje final
+				if (GestionBotonesCartas.Instance != null)
+				{
+					GestionBotonesCartas.Instance.MostrarMensaje($"¡{cartasADescartarLista.Count} cartas descartadas!");
+					yield return new WaitForSeconds(1.5f);
+					GestionBotonesCartas.Instance.OcultarMensaje();
+				}
+				
+				Debug.Log($"🤖 Dinamita completada: {cartasADescartarLista.Count} cartas descartadas");
+			}
+		}
+	}
+	
+	private IEnumerator EsperarConMensaje(float segundos, string mensaje = "")
+	{
+		if (!string.IsNullOrEmpty(mensaje) && GestionBotonesCartas.Instance != null)
+		{
+			GestionBotonesCartas.Instance.MostrarMensaje(mensaje);
+		}
+		
+		yield return new WaitForSeconds(segundos);
+		
+		if (!string.IsNullOrEmpty(mensaje) && GestionBotonesCartas.Instance != null)
+		{
+			GestionBotonesCartas.Instance.OcultarMensaje();
+		}
+	}
+	
+	public void ForzarFinTurno()
+	{
+		StopAllCoroutines();
+		isMyTurn = false;
+		
+		// Asegurar que se desbloquea el GameManager
+		if (GameManager.Instance != null)
+		{
+			GameManager.Instance.bloquearEndTurnAutomatico = false;
+		}
+		
+		// Limpiar cualquier mensaje pendiente
+		if (GestionBotonesCartas.Instance != null)
+		{
+			GestionBotonesCartas.Instance.OcultarMensaje();
+		}
+		
+		// Des-resaltar cualquier avatar
+		if (SistemaAvataresJugadores.Instance != null)
+		{
+			SistemaAvataresJugadores.Instance.ResaltarTodosLosAvatares(false);
+		}
+		
+		Debug.Log($"🛑 Turno de IA {myTotem.playerID} forzado a terminar");
 	}
 }

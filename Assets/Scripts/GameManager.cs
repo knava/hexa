@@ -133,11 +133,7 @@ public class GameManager : MonoBehaviour
 
     private void StartPlayerTurn()
 	{
-		if (juegoTerminado)
-		{
-			Debug.Log("⏹️ Juego terminado, no se inicia nuevo turno");
-			return;
-		}
+		if (juegoTerminado) return;
 		
 		if (currentPlayerIndex >= players.Count) return;
 
@@ -149,6 +145,7 @@ public class GameManager : MonoBehaviour
 			UIManager.Instance?.SetDiceButtonVisibility(false);
 			if (!waitingForDiceRoll)
 			{
+				// La IA ahora evaluará cartas de acción primero
 				aiController.StartAITurn();
 			}
 		}
@@ -241,10 +238,10 @@ public class GameManager : MonoBehaviour
 			return;
 		}
 		
-		// Si está bloqueado, no hacer nada
+		// ✅ VERIFICACIÓN CRÍTICA: Si está bloqueado, no hacer nada
 		if (bloquearEndTurnAutomatico)
 		{
-			Debug.Log("⏸️ EndTurn bloqueado temporalmente");
+			Debug.Log("⏸️ EndTurn bloqueado temporalmente - carta de acción en progreso");
 			return;
 		}
 		
