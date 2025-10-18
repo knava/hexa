@@ -189,6 +189,18 @@ public class ManoJugador : MonoBehaviour
     // NUEVO M√âTODO: Seleccionar una carta (selecci√≥n √∫nica)
     public void SeleccionarCarta(GameObject carta)
 	{
+		// ? VERIFICAR: Si ya se tir®Æ el dado en este turno, no permitir seleccionar cartas de acci®Æn
+		if (GameManager.Instance != null && GameManager.Instance.dadoTiradoEnEsteTurno)
+		{
+			// Usar un nombre diferente para evitar conflicto
+			Carta3D cartaVerificacion = carta?.GetComponent<Carta3D>();
+			if (cartaVerificacion != null && cartaVerificacion.EsCartaDeAccion())
+			{
+				Debug.Log("?? No se puede seleccionar carta de acci®Æn - Ya se tir®Æ el dado en este turno");
+				return;
+			}
+		}
+		
 		if (carta == null || !cartasEnMano.Contains(carta)) return;
 		
 		Carta3D cartaScript = carta.GetComponent<Carta3D>();
@@ -206,17 +218,17 @@ public class ManoJugador : MonoBehaviour
 			// Es la misma carta - deseleccionar
 			cartaScript.Deseleccionar();
 			cartaSeleccionadaActual = null;
-			Debug.Log($"üî¥ Carta deseleccionada - Jugador {playerID}");
+			Debug.Log($"?? Carta deseleccionada - Jugador {playerID}");
 		}
 		else
 		{
 			// Es una carta diferente - seleccionar
 			cartaScript.EstaSeleccionada = true;
 			cartaSeleccionadaActual = carta;
-			Debug.Log($"üü¢ Carta seleccionada - Jugador {playerID}");
+			Debug.Log($"?? Carta seleccionada - Jugador {playerID}");
 		}
 		
-		// NUEVO: Notificar al sistema de botones que la selecci√≥n cambi√≥
+		// Notificar al sistema de botones que la selecci®Æn cambi®Æ
 		if (GestionBotonesCartas.Instance != null)
 		{
 			GestionBotonesCartas.Instance.ForzarActualizacionBoton();
@@ -271,7 +283,7 @@ public class ManoJugador : MonoBehaviour
 			}
 		}
 		
-		Debug.Log($"‚úÖ Todas las cartas deseleccionadas - Jugador {playerID}");
+		Debug.Log($"‚ú?Todas las cartas deseleccionadas - Jugador {playerID}");
 	}
 
     public void HabilitarCartasParaRobo()
@@ -330,7 +342,7 @@ public class ManoJugador : MonoBehaviour
 		{
 			cartasEnMano.Remove(carta);
 			
-			// ‚úÖ Resetear el estado de selecci√≥n de la carta antes de removerla
+			// ‚ú?Resetear el estado de selecci√≥n de la carta antes de removerla
 			Carta3D cartaScript = carta.GetComponent<Carta3D>();
 			if (cartaScript != null)
 			{
@@ -344,16 +356,16 @@ public class ManoJugador : MonoBehaviour
 				cartaSeleccionadaActual = null;
 			}
 			
-			// ‚úÖ Remover de la selecci√≥n de Dinamita si est√° ah√≠
+			// ‚ú?Remover de la selecci√≥n de Dinamita si est√° ah√≠
 			if (CartasSeleccionadasParaDinamita.Contains(carta))
 			{
 				CartasSeleccionadasParaDinamita.Remove(carta);
 			}
 			
-			// ‚úÖ Asegurar que se reorganiza la mano despu√©s de remover
+			// ‚ú?Asegurar que se reorganiza la mano despu√©s de remover
 			ReorganizarMano();
 			
-			Debug.Log($"üóëÔ∏è Carta removida de jugador {playerID}. Cartas restantes: {cartasEnMano.Count}");
+			Debug.Log($"üóëÔ∏?Carta removida de jugador {playerID}. Cartas restantes: {cartasEnMano.Count}");
 		}
 	}
     

@@ -58,6 +58,9 @@ public class GameManager : MonoBehaviour
 	
 	[Header("Control de Estado")]
 	public bool juegoTerminado = false;
+	
+	[Header("Control de Acciones por Turno")]
+	public bool dadoTiradoEnEsteTurno = false;
 
     void Awake()
     {
@@ -160,26 +163,44 @@ public class GameManager : MonoBehaviour
 
     public void OnDiceButtonPressed()
 	{
-		if (juegoTerminado) return; // ✅ Agregar esta línea
+		if (juegoTerminado) return;
 		
 		if (diceController == null)
 		{
 			Debug.LogError("No se puede tirar el dado: diceController no está asignado.");
 			return;
 		}
+		
 		if (!waitingForDiceRoll && players[currentPlayerIndex].GetComponent<AIController>() == null)
 		{
 			waitingForDiceRoll = true;
+			dadoTiradoEnEsteTurno = true; // ✅ MARCAR QUE SE TIRÓ EL DADO
+			
+			// DESACTIVAR BOTÓN UTILIZAR AL TIRAR DADO
+			if (GestionBotonesCartas.Instance != null)
+			{
+				GestionBotonesCartas.Instance.OnDiceActivated();
+			}
+			
 			diceController.PrepararDado();
 		}
 	}
 
+
     private void HandleDiceResult(int result)
-    {
-        diceResult = result;
-        waitingForDiceRoll = false;
-        ShowReachableHexagons(players[currentPlayerIndex].currentHexagon, diceResult);
-    }
+	{
+		diceResult = result;
+		waitingForDiceRoll = false;
+		
+		// ✅ REACTIVAR BOTÓN UTILIZAR AL TERMINAR DADO (si es jugador humano)
+		if (players[currentPlayerIndex].GetComponent<AIController>() == null && 
+			GestionBotonesCartas.Instance != null)
+		{
+			GestionBotonesCartas.Instance.OnDiceDeactivated();
+		}
+		
+		ShowReachableHexagons(players[currentPlayerIndex].currentHexagon, diceResult);
+	}
 
     public void ShowReachableHexagons(HexagonPiece startHex, int steps)
     {
@@ -238,7 +259,7 @@ public class GameManager : MonoBehaviour
 			return;
 		}
 		
-		// ✅ VERIFICACIÓN CRÍTICA: Si está bloqueado, no hacer nada
+		// Si está bloqueado, no hacer nada
 		if (bloquearEndTurnAutomatico)
 		{
 			Debug.Log("⏸️ EndTurn bloqueado temporalmente - carta de acción en progreso");
@@ -259,10 +280,14 @@ public class GameManager : MonoBehaviour
 		}
 		
 		Debug.Log("🔄 Finalizando turno normal...");
+		
+		// ✅ RESETEAR ESTADO DE ACCIONES PARA EL SIGUIENTE TURNO
+		dadoTiradoEnEsteTurno = false;
+		
 		ClearSelection();
 		currentPlayerIndex = (currentPlayerIndex + 1) % players.Count;
 		
-		// NUEVO: Notificar cambio de turno al sistema de botones
+		// Notificar cambio de turno al sistema de botones
 		if (GestionBotonesCartas.Instance != null)
 		{
 			GestionBotonesCartas.Instance.ForzarActualizacionBoton();
@@ -926,5 +951,20 @@ public class GameManager : MonoBehaviour
 		
 		// Cargar la escena del menú
 		UnityEngine.SceneManagement.SceneManager.LoadScene(nombreEscenaMenu);
+	}
+	
+	public void CancelarDado()
+	{
+		if (waitingForDiceRoll)
+		{
+			waitingForDiceRoll = false;
+			
+			// ✅ REACTIVAR BOTÓN UTILIZAR AL CANCELAR DADO
+			if (players[currentPlayerIndex].GetComponent<AIController>() == null && 
+				GestionBotonesCartas.Instance != null)
+			{
+				GestionBotonesCartas.Instance.OnDiceDeactivated();
+			}
+		}
 	}
 }
