@@ -21,7 +21,6 @@ public class ManoJugador : MonoBehaviour
 
     private List<GameObject> cartasEnMano = new List<GameObject>();
     private MazoFisico mazo;
-    private bool cartasHabilitadasParaRobo = false;
     
     // NUEVO: Referencia a la carta actualmente seleccionada
     private GameObject cartaSeleccionadaActual = null;
@@ -288,7 +287,6 @@ public class ManoJugador : MonoBehaviour
 
     public void HabilitarCartasParaRobo()
     {
-        cartasHabilitadasParaRobo = true;
         int cartasHabilitadas = 0;
         
         foreach (GameObject carta in cartasEnMano)
@@ -315,7 +313,6 @@ public class ManoJugador : MonoBehaviour
 
     public void DeshabilitarCartasParaRobo()
     {
-        cartasHabilitadasParaRobo = false;
         
         foreach (GameObject carta in cartasEnMano)
         {

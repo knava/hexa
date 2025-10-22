@@ -12,17 +12,18 @@ public class GestionBotonesCartas : MonoBehaviour
     [Header("Referencias UI")]
     public Button botonUtilizar;
     public TextMeshProUGUI textoBotonUtilizar;
-    public TextMeshProUGUI textoMensaje; // SOLO el TextMeshPro, no el panel completo
+    public TextMeshProUGUI textoMensaje;
     
-    [Header("Configuración")]
+    [Header("Configuración Visual")]
     public Color colorNormal = Color.white;
     public Color colorDeshabilitado = Color.gray;
     
+    // Estado interno
     private ManoJugador manoJugadorActual;
     private GameObject cartaSeleccionada;
-	private bool cartaEnUso = false;
+    private bool cartaEnUso = false;
     
-    // Estados para la selección de objetivo
+    // Estados para selección de objetivo
     private bool esperandoSeleccionObjetivo = false;
     private int jugadorObjetivoID = -1;
     private CardType tipoCartaEnUso;
@@ -48,7 +49,7 @@ public class GestionBotonesCartas : MonoBehaviour
             botonUtilizar.onClick.AddListener(UtilizarCartaSeleccionada);
         }
         
-        // NUEVO: Ocultar el texto al inicio (pero el panel permanece activo)
+        // Ocultar texto al inicio
         if (textoMensaje != null)
         {
             textoMensaje.gameObject.SetActive(false);
@@ -67,67 +68,72 @@ public class GestionBotonesCartas : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// Actualiza el estado del botón de utilizar carta
+    /// </summary>
     public void ActualizarEstadoBoton()
-	{
-		// ✅ VERIFICACIÓN CRÍTICA: Si ya se tiró el dado en este turno, NO mostrar botón
-		if (GameManager.Instance != null && GameManager.Instance.dadoTiradoEnEsteTurno)
-		{
-			OcultarBotonUtilizar();
-			//Debug.Log("⚠️ Botón Utilizar oculto - Ya se tiró el dado en este turno");
-			return;
-		}
-		
-		// Si estamos en medio de una acción de carta, no actualizar
-		if (esperandoSeleccionObjetivo || cartaEnUso) 
-		{
-			OcultarBotonUtilizar();
-			return;
-		}
+    {
+        // Verificar si ya se tiró el dado en este turno
+        if (GameManager.Instance != null && GameManager.Instance.dadoTiradoEnEsteTurno)
+        {
+            OcultarBotonUtilizar();
+            return;
+        }
+        
+        // Si estamos en medio de una acción de carta, no actualizar
+        if (esperandoSeleccionObjetivo || cartaEnUso) 
+        {
+            OcultarBotonUtilizar();
+            return;
+        }
 
-		// Verificar si es el turno del jugador humano
-		bool esTurnoJugador = GameManager.Instance != null && 
-							  GameManager.Instance.currentPlayerIndex == 0 &&
-							  GameManager.Instance.currentPhase == GamePhase.TotemMovement;
+        // Verificar si es el turno del jugador humano
+        bool esTurnoJugador = GameManager.Instance != null && 
+                              GameManager.Instance.currentPlayerIndex == 0 &&
+                              GameManager.Instance.currentPhase == GamePhase.TotemMovement;
 
-		if (!esTurnoJugador)
-		{
-			OcultarBotonUtilizar();
-			return;
-		}
+        if (!esTurnoJugador)
+        {
+            OcultarBotonUtilizar();
+            return;
+        }
 
-		// Buscar la mano del jugador actual si no la tenemos
-		if (manoJugadorActual == null)
-		{
-			manoJugadorActual = BuscarManoJugadorActual();
-		}
+        // Buscar la mano del jugador actual si no la tenemos
+        if (manoJugadorActual == null)
+        {
+            manoJugadorActual = BuscarManoJugadorActual();
+        }
 
-		// Verificar si hay una carta de acción seleccionada
-		bool puedeMostrarBoton = esTurnoJugador && 
-								manoJugadorActual != null && 
-								manoJugadorActual.GetCartaSeleccionada() != null;
+        // Verificar si hay una carta de acción seleccionada
+        bool puedeMostrarBoton = esTurnoJugador && 
+                                manoJugadorActual != null && 
+                                manoJugadorActual.GetCartaSeleccionada() != null;
 
-		if (puedeMostrarBoton)
-		{
-			GameObject carta = manoJugadorActual.GetCartaSeleccionada();
-			Carta3D cartaScript = carta?.GetComponent<Carta3D>();
-			
-			if (cartaScript != null && cartaScript.EsCartaDeAccion())
-			{
-				MostrarBotonUtilizar();
-				cartaSeleccionada = carta;
-				tipoCartaEnUso = cartaScript.GetTipoCarta();
-			}
-			else
-			{
-				OcultarBotonUtilizar();
-			}
-		}
-		else
-		{
-			OcultarBotonUtilizar();
-		}
-	}
+        if (puedeMostrarBoton)
+        {
+            GameObject carta = manoJugadorActual.GetCartaSeleccionada();
+            Carta3D cartaScript = carta?.GetComponent<Carta3D>();
+            
+            if (cartaScript != null && cartaScript.EsCartaDeAccion())
+            {
+                MostrarBotonUtilizar();
+                cartaSeleccionada = carta;
+                tipoCartaEnUso = cartaScript.GetTipoCarta();
+            }
+            else
+            {
+                OcultarBotonUtilizar();
+            }
+        }
+        else
+        {
+            OcultarBotonUtilizar();
+        }
+    }
 
+    /// <summary>
+    /// Busca la mano del jugador humano actual
+    /// </summary>
     private ManoJugador BuscarManoJugadorActual()
     {
         ManoJugador[] todasLasManos = FindObjectsOfType<ManoJugador>();
@@ -143,6 +149,9 @@ public class GestionBotonesCartas : MonoBehaviour
         return null;
     }
 
+    /// <summary>
+    /// Muestra el botón de utilizar carta
+    /// </summary>
     private void MostrarBotonUtilizar()
     {
         if (botonUtilizar != null && !botonUtilizar.gameObject.activeInHierarchy)
@@ -154,115 +163,105 @@ public class GestionBotonesCartas : MonoBehaviour
             {
                 textoBotonUtilizar.color = colorNormal;
             }
-            
-            Debug.Log("✅ Botón UTILIZAR activado");
         }
     }
 
+    /// <summary>
+    /// Oculta el botón de utilizar carta
+    /// </summary>
     private void OcultarBotonUtilizar()
     {
         if (botonUtilizar != null && botonUtilizar.gameObject.activeInHierarchy)
         {
             botonUtilizar.gameObject.SetActive(false);
-            //cartaSeleccionada = null;
-            Debug.Log("❌ Botón UTILIZAR ocultado");
         }
     }
 
-    // NUEVO: Mostrar solo el texto (no el panel completo)
+    /// <summary>
+    /// Muestra un mensaje temporal al jugador
+    /// </summary>
     public void MostrarMensaje(string mensaje)
     {
         if (textoMensaje != null)
         {
             textoMensaje.text = mensaje;
             textoMensaje.gameObject.SetActive(true);
-            Debug.Log($"📢 Mensaje mostrado: {mensaje}");
-        }
-        else
-        {
-            Debug.LogWarning("⚠️ Texto de mensaje no asignado");
         }
     }
 
-    // NUEVO: Ocultar solo el texto (no el panel completo)
+    /// <summary>
+    /// Oculta el mensaje actual
+    /// </summary>
     public void OcultarMensaje()
     {
         if (textoMensaje != null)
         {
             textoMensaje.gameObject.SetActive(false);
-            Debug.Log("📢 Mensaje ocultado");
         }
     }
 
+    /// <summary>
+    /// Ejecuta la acción de la carta seleccionada
+    /// </summary>
     public void UtilizarCartaSeleccionada()
-	{
-		if (cartaSeleccionada == null || cartaEnUso)
-		{
-			Debug.LogWarning("⚠️ No hay carta seleccionada para utilizar");
-			return;
-		}
+    {
+        if (cartaSeleccionada == null || cartaEnUso) return;
 
-		Carta3D cartaScript = cartaSeleccionada.GetComponent<Carta3D>();
-		if (cartaScript == null)
-		{
-			Debug.LogError("❌ La carta seleccionada no tiene script Carta3D");
-			return;
-		}
+        Carta3D cartaScript = cartaSeleccionada.GetComponent<Carta3D>();
+        if (cartaScript == null) return;
 
-		Debug.Log($"🎯 Utilizando carta: {cartaScript.GetTipoCarta()}");
-		tipoCartaEnUso = cartaScript.GetTipoCarta();
-		
-		// ✅ DESACTIVAR BOTÓN DE TIRAR DADO INMEDIATAMENTE
-		if (UIManager.Instance != null)
-		{
-			UIManager.Instance.SetDiceButtonVisibility(false);
-		}
-		
-		cartaEnUso = true;
+        tipoCartaEnUso = cartaScript.GetTipoCarta();
+        
+        // Desactivar botón de tirar dado inmediatamente
+        if (UIManager.Instance != null)
+        {
+            UIManager.Instance.SetDiceButtonVisibility(false);
+        }
+        
+        cartaEnUso = true;
 
-		// Ejecutar la acción según el tipo de carta
-		switch (tipoCartaEnUso)
-		{
-			case CardType.Dinamita:
-				IniciarSeleccionObjetivoDinamita();
-				break;
-			default:
-				Debug.LogWarning($"⚠️ Acción no implementada para: {cartaScript.GetTipoCarta()}");
-				cartaEnUso = false;
-				// ✅ REACTIVAR BOTÓN DE DADO SI HAY ERROR
-				if (UIManager.Instance != null)
-				{
-					UIManager.Instance.SetDiceButtonVisibility(true);
-				}
-				break;
-		}
-	}
+        // Ejecutar la acción según el tipo de carta
+        switch (tipoCartaEnUso)
+        {
+            case CardType.Dinamita:
+                IniciarSeleccionObjetivoDinamita();
+                break;
+            default:
+                cartaEnUso = false;
+                // Reactivar botón de dado si hay error
+                if (UIManager.Instance != null)
+                {
+                    UIManager.Instance.SetDiceButtonVisibility(true);
+                }
+                break;
+        }
+    }
 
-    // Método: Iniciar selección de objetivo para Dinamita
+    /// <summary>
+    /// Inicia la selección de objetivo para la carta Dinamita
+    /// </summary>
     private void IniciarSeleccionObjetivoDinamita()
     {
-        Debug.Log("💥 Iniciando selección de objetivo para DINAMITA");
-        
         // Ocultar botón utilizar temporalmente
         OcultarBotonUtilizar();
         
         // Activar modo selección de objetivo
         esperandoSeleccionObjetivo = true;
         
-        // Mostrar mensaje (solo el texto)
+        // Mostrar mensaje al jugador
         MostrarMensaje("Selecciona un jugador objetivo para la DINAMITA");
         
-        // Resaltar avatares de jugadores disponibles (excluyendo al jugador actual)
+        // Resaltar avatares de jugadores disponibles
         List<int> jugadoresDisponibles = ObtenerJugadoresObjetivo();
         if (SistemaAvataresJugadores.Instance != null)
         {
             SistemaAvataresJugadores.Instance.ResaltarJugadoresDisponibles(jugadoresDisponibles);
         }
-        
-        Debug.Log("🎯 Modo selección activado - Haz clic en un avatar objetivo");
     }
 
-    // Método: Obtener jugadores que pueden ser objetivo
+    /// <summary>
+    /// Obtiene la lista de jugadores que pueden ser objetivo
+    /// </summary>
     private List<int> ObtenerJugadoresObjetivo()
     {
         List<int> jugadoresDisponibles = new List<int>();
@@ -282,11 +281,6 @@ public class GestionBotonesCartas : MonoBehaviour
                         if (manoObjetivo.CantidadCartas > 0)
                         {
                             jugadoresDisponibles.Add(playerID);
-                            Debug.Log($"✅ Jugador {playerID} disponible como objetivo - Cartas: {manoObjetivo.CantidadCartas}");
-                        }
-                        else
-                        {
-                            Debug.Log($"❌ Jugador {playerID} no tiene cartas - No puede ser objetivo");
                         }
                     }
                 }
@@ -295,14 +289,15 @@ public class GestionBotonesCartas : MonoBehaviour
         
         if (jugadoresDisponibles.Count == 0)
         {
-            Debug.LogWarning("⚠️ No hay jugadores disponibles como objetivo");
             CancelarSeleccionObjetivo();
         }
         
         return jugadoresDisponibles;
     }
 
-    // Método: Manejar clic en avatar durante selección
+    /// <summary>
+    /// Maneja el clic en avatar durante selección de objetivo
+    /// </summary>
     private void ManejarClicEnAvatar()
     {
         Ray ray = Camera.main.ScreenPointToRay(Input.mousePosition);
@@ -319,24 +314,19 @@ public class GestionBotonesCartas : MonoBehaviour
                 List<int> jugadoresDisponibles = ObtenerJugadoresObjetivo();
                 if (jugadoresDisponibles.Contains(playerIDObjetivo))
                 {
-                    Debug.Log($"🎯 Jugador {playerIDObjetivo} seleccionado como objetivo");
                     jugadorObjetivoID = playerIDObjetivo;
                     ConfirmarSeleccionObjetivo();
-                }
-                else
-                {
-                    Debug.LogWarning($"⚠️ Jugador {playerIDObjetivo} no puede ser objetivo");
                 }
             }
         }
     }
 
-    // Método: Confirmar selección y ejecutar la acción
+    /// <summary>
+    /// Confirma la selección y ejecuta la acción
+    /// </summary>
     private void ConfirmarSeleccionObjetivo()
     {
-        Debug.Log($"💥 Confirmando Dinamita contra Jugador {jugadorObjetivoID}");
-        
-        // Ocultar solo el texto (no el panel completo)
+        // Ocultar mensaje
         OcultarMensaje();
         
         // Quitar resaltado de avatares
@@ -353,242 +343,205 @@ public class GestionBotonesCartas : MonoBehaviour
         jugadorObjetivoID = -1;
     }
 
-    // Método: Cancelar selección
+    /// <summary>
+    /// Cancela la selección de objetivo
+    /// </summary>
     private void CancelarSeleccionObjetivo()
-	{
-		Debug.Log("❌ Selección de objetivo cancelada");
-		
-		// Ocultar solo el texto (no el panel completo)
-		OcultarMensaje();
-		
-		if (SistemaAvataresJugadores.Instance != null)
-		{
-			SistemaAvataresJugadores.Instance.ResaltarTodosLosAvatares(false);
-		}
-		
-		esperandoSeleccionObjetivo = false;
-		jugadorObjetivoID = -1;
-		cartaEnUso = false;
-		
-		// ✅ REACTIVAR BOTÓN DE TIRAR DADO AL CANCELAR
-		bool esTurnoJugador = GameManager.Instance != null && 
-							  GameManager.Instance.currentPlayerIndex == 0 &&
-							  GameManager.Instance.currentPhase == GamePhase.TotemMovement;
-		
-		if (esTurnoJugador && UIManager.Instance != null)
-		{
-			UIManager.Instance.SetDiceButtonVisibility(true);
-		}
-		
-		// Volver a mostrar botón utilizar
-		ActualizarEstadoBoton();
-	}
-
-    // ... (los métodos EjecutarDinamita, ProcesoDescarteDinamita, TerminarUsoDinamita 
-    // y TerminarTurnoDespuesDeUsarCarta se mantienen IGUAL)
-
-    // Método: Ejecutar la lógica de la Dinamita
-    private void EjecutarDinamita(int jugadorObjetivoID)
-	{
-		Debug.Log($"💥 EJECUTANDO DINAMITA contra Jugador {jugadorObjetivoID}");
-		
-		// Obtener la mano del jugador objetivo
-		if (MazoFisico.Instance != null && 
-			MazoFisico.Instance.manosJugadores.TryGetValue(jugadorObjetivoID, out ManoJugador manoObjetivo))
-		{
-			int cartasTotales = manoObjetivo.CantidadCartas;
-			
-			// Calcular cuántas cartas descartar (mitad, redondeando hacia arriba)
-			int cartasADescartar = Mathf.CeilToInt(cartasTotales / 2f);
-			
-			Debug.Log($"📊 Jugador {jugadorObjetivoID} tiene {cartasTotales} cartas - A descartar: {cartasADescartar}");
-			
-			if (cartasADescartar > 0)
-			{
-				// NUEVO: Iniciar proceso de selección de cartas para descartar
-				IniciarSeleccionCartasParaDescarte(manoObjetivo, cartasADescartar);
-			}
-			else
-			{
-				Debug.Log("⚠️ No hay cartas para descartar");
-				TerminarUsoDinamita();
-			}
-		}
-		else
-		{
-			Debug.LogError($"❌ No se encontró mano del jugador objetivo {jugadorObjetivoID}");
-			TerminarUsoDinamita();
-		}
-	}
-	
-	private void IniciarSeleccionCartasParaDescarte(ManoJugador manoObjetivo, int cartasADescartar)
-	{
-		Debug.Log($"🎯 Iniciando selección de {cartasADescartar} cartas para descartar");
-		
-		// Mostrar mensaje al jugador
-		MostrarMensaje($"Selecciona {cartasADescartar} cartas del Jugador {manoObjetivo.playerID} para descartar");
-		
-		// Habilitar las cartas del jugador objetivo para selección
-		manoObjetivo.HabilitarCartasParaSeleccionDinamita(cartasADescartar);
-		
-		// Iniciar corrutina que espera la selección
-		StartCoroutine(EsperarSeleccionCartas(manoObjetivo, cartasADescartar));
-	}
-	
-	private IEnumerator EsperarSeleccionCartas(ManoJugador manoObjetivo, int cartasADescartar)
-	{
-		// Esperar a que se seleccionen las cartas requeridas
-		while (manoObjetivo.CartasSeleccionadasParaDinamita.Count < cartasADescartar)
-		{
-			yield return null;
-		}
-		
-		Debug.Log($"✅ Selección completada - {cartasADescartar} cartas seleccionadas");
-		
-		// Proceder con el descarte de las cartas seleccionadas
-		ProcesarDescarteDinamita(manoObjetivo);
-	}
-	
-	private void ProcesarDescarteDinamita(ManoJugador manoObjetivo)
-	{
-		Debug.Log($"🗑️ Procesando descarte de cartas seleccionadas...");
-		
-		// Obtener las cartas seleccionadas
-		List<GameObject> cartasSeleccionadas = new List<GameObject>(manoObjetivo.CartasSeleccionadasParaDinamita);
-		
-		// Mover cada carta seleccionada al descarte
-		foreach (GameObject carta in cartasSeleccionadas)
-		{
-			if (MazoDescarte.Instance != null)
-			{
-				// ✅ Asegurar que la carta tenga la escala correcta antes de mover al descarte
-				Carta3D cartaScript = carta.GetComponent<Carta3D>();
-				if (cartaScript != null)
-				{
-					cartaScript.SetEnManoIA(false); // Forzar escala estándar
-				}
-				
-				MazoDescarte.Instance.AgregarCartaDescarte(carta);
-				manoObjetivo.RemoverCarta(carta);
-				Debug.Log($"🗑️ Carta descartada: {carta.name}");
-			}
-		}
-		
-		// Limpiar la selección de dinamita
-		manoObjetivo.LimpiarSeleccionDinamita();
-		
-		// Ocultar mensaje
-		OcultarMensaje();
-		
-		// Terminar el uso de la Dinamita
-		TerminarUsoDinamita();
-	}
-	
-	
-	
-	public void CancelarSeleccionCartas()
-	{
-		if (jugadorObjetivoID != -1)
-		{
-			// Obtener la mano del jugador objetivo
-			if (MazoFisico.Instance != null && 
-				MazoFisico.Instance.manosJugadores.TryGetValue(jugadorObjetivoID, out ManoJugador manoObjetivo))
-			{
-				manoObjetivo.LimpiarSeleccionDinamita();
-			}
-		}
-		
-		OcultarMensaje();
-		Debug.Log("❌ Selección de cartas cancelada");
-	}
-
-    // Método: Proceso de descarte con la Dinamita
-    private IEnumerator ProcesoDescarteDinamita(ManoJugador manoObjetivo, int cartasADescartar)
     {
-        Debug.Log($"🃏 Iniciando descarte de {cartasADescartar} cartas...");
+        // Ocultar mensaje
+        OcultarMensaje();
         
-        // Obtener todas las cartas de la mano objetivo
-        List<GameObject> cartasEnMano = manoObjetivo.GetCartas();
-        
-        // Para el Jugador 1 (humano), permitir seleccionar qué cartas descartar
-        // Por ahora, descartamos aleatoriamente (luego implementaremos selección)
-        for (int i = 0; i < cartasADescartar && cartasEnMano.Count > 0; i++)
+        // Quitar resaltado de avatares
+        if (SistemaAvataresJugadores.Instance != null)
         {
-            // Seleccionar carta aleatoria para descartar
-            int indiceAleatorio = Random.Range(0, cartasEnMano.Count);
-            GameObject cartaADescartar = cartasEnMano[indiceAleatorio];
-            
-            // Mover al descarte
-            if (MazoDescarte.Instance != null)
-            {
-                MazoDescarte.Instance.AgregarCartaDescarte(cartaADescartar);
-                manoObjetivo.RemoverCarta(cartaADescartar);
-                Debug.Log($"🗑️ Carta {i+1}/{cartasADescartar} descartada");
-            }
-            
-            // Pequeño delay entre descartes
-            yield return new WaitForSeconds(0.3f);
-            
-            // Actualizar lista
-            cartasEnMano = manoObjetivo.GetCartas();
+            SistemaAvataresJugadores.Instance.ResaltarTodosLosAvatares(false);
         }
         
-        Debug.Log($"✅ Descarte completado - {cartasADescartar} cartas descartadas");
+        esperandoSeleccionObjetivo = false;
+        jugadorObjetivoID = -1;
+        cartaEnUso = false;
+        
+        // Reactivar botón de tirar dado al cancelar
+        bool esTurnoJugador = GameManager.Instance != null && 
+                              GameManager.Instance.currentPlayerIndex == 0 &&
+                              GameManager.Instance.currentPhase == GamePhase.TotemMovement;
+        
+        if (esTurnoJugador && UIManager.Instance != null)
+        {
+            UIManager.Instance.SetDiceButtonVisibility(true);
+        }
+        
+        // Volver a mostrar botón utilizar
+        ActualizarEstadoBoton();
+    }
+
+    /// <summary>
+    /// Ejecuta la lógica de la carta Dinamita
+    /// </summary>
+    private void EjecutarDinamita(int jugadorObjetivoID)
+    {
+        // Obtener la mano del jugador objetivo
+        if (MazoFisico.Instance != null && 
+            MazoFisico.Instance.manosJugadores.TryGetValue(jugadorObjetivoID, out ManoJugador manoObjetivo))
+        {
+            int cartasTotales = manoObjetivo.CantidadCartas;
+            
+            // Calcular cuántas cartas descartar (mitad, redondeando hacia arriba)
+            int cartasADescartar = Mathf.CeilToInt(cartasTotales / 2f);
+            
+            if (cartasADescartar > 0)
+            {
+                // Iniciar proceso de selección de cartas para descartar
+                IniciarSeleccionCartasParaDescarte(manoObjetivo, cartasADescartar);
+            }
+            else
+            {
+                TerminarUsoDinamita();
+            }
+        }
+        else
+        {
+            TerminarUsoDinamita();
+        }
+    }
+
+    /// <summary>
+    /// Inicia la selección de cartas para descartar con Dinamita
+    /// </summary>
+    private void IniciarSeleccionCartasParaDescarte(ManoJugador manoObjetivo, int cartasADescartar)
+    {
+        // Mostrar mensaje al jugador
+        MostrarMensaje($"Selecciona {cartasADescartar} cartas del Jugador {manoObjetivo.playerID} para descartar");
+        
+        // Habilitar las cartas del jugador objetivo para selección
+        manoObjetivo.HabilitarCartasParaSeleccionDinamita(cartasADescartar);
+        
+        // Iniciar corrutina que espera la selección
+        StartCoroutine(EsperarSeleccionCartas(manoObjetivo, cartasADescartar));
+    }
+
+    /// <summary>
+    /// Espera a que se seleccionen las cartas requeridas
+    /// </summary>
+    private IEnumerator EsperarSeleccionCartas(ManoJugador manoObjetivo, int cartasADescartar)
+    {
+        // Esperar a que se seleccionen las cartas requeridas
+        while (manoObjetivo.CartasSeleccionadasParaDinamita.Count < cartasADescartar)
+        {
+            yield return null;
+        }
+        
+        // Proceder con el descarte de las cartas seleccionadas
+        ProcesarDescarteDinamita(manoObjetivo);
+    }
+
+    /// <summary>
+    /// Procesa el descarte de las cartas seleccionadas
+    /// </summary>
+    private void ProcesarDescarteDinamita(ManoJugador manoObjetivo)
+    {
+        // Obtener las cartas seleccionadas
+        List<GameObject> cartasSeleccionadas = new List<GameObject>(manoObjetivo.CartasSeleccionadasParaDinamita);
+        
+        // Mover cada carta seleccionada al descarte
+        foreach (GameObject carta in cartasSeleccionadas)
+        {
+            if (MazoDescarte.Instance != null)
+            {
+                // Asegurar que la carta tenga la escala correcta antes de mover al descarte
+                Carta3D cartaScript = carta.GetComponent<Carta3D>();
+                if (cartaScript != null)
+                {
+                    cartaScript.SetEnManoIA(false);
+                }
+                
+                MazoDescarte.Instance.AgregarCartaDescarte(carta);
+                manoObjetivo.RemoverCarta(carta);
+            }
+        }
+        
+        // Limpiar la selección de dinamita
+        manoObjetivo.LimpiarSeleccionDinamita();
+        
+        // Ocultar mensaje
+        OcultarMensaje();
         
         // Terminar el uso de la Dinamita
         TerminarUsoDinamita();
     }
 
-    // Método: Terminar el uso de la Dinamita
+    /// <summary>
+    /// Cancela la selección de cartas
+    /// </summary>
+    public void CancelarSeleccionCartas()
+    {
+        if (jugadorObjetivoID != -1)
+        {
+            // Obtener la mano del jugador objetivo
+            if (MazoFisico.Instance != null && 
+                MazoFisico.Instance.manosJugadores.TryGetValue(jugadorObjetivoID, out ManoJugador manoObjetivo))
+            {
+                manoObjetivo.LimpiarSeleccionDinamita();
+            }
+        }
+        
+        OcultarMensaje();
+    }
+
+    /// <summary>
+    /// Termina el uso de la carta Dinamita
+    /// </summary>
     private void TerminarUsoDinamita()
-	{
-		Debug.Log("🔚 Terminando uso de Dinamita");
-		
-		// Mover la carta de dinamita al descarte
-		if (cartaSeleccionada != null && manoJugadorActual != null)
-		{
-			if (MazoDescarte.Instance != null)
-			{
-				// Deseleccionar antes de mover
-				Carta3D cartaScript = cartaSeleccionada.GetComponent<Carta3D>();
-				if (cartaScript != null)
-				{
-					cartaScript.Deseleccionar();
-				}
-				
-				MazoDescarte.Instance.AgregarCartaDescarte(cartaSeleccionada);
-				manoJugadorActual.RemoverCarta(cartaSeleccionada);
-				Debug.Log("✅ Dinamita utilizada y movida al descarte");
-			}
-		}
+    {
+        // Mover la carta de dinamita al descarte
+        if (cartaSeleccionada != null && manoJugadorActual != null)
+        {
+            if (MazoDescarte.Instance != null)
+            {
+                // Deseleccionar antes de mover
+                Carta3D cartaScript = cartaSeleccionada.GetComponent<Carta3D>();
+                if (cartaScript != null)
+                {
+                    cartaScript.Deseleccionar();
+                }
+                
+                MazoDescarte.Instance.AgregarCartaDescarte(cartaSeleccionada);
+                manoJugadorActual.RemoverCarta(cartaSeleccionada);
+            }
+        }
 
-		// Deseleccionar todas las cartas
-		if (manoJugadorActual != null)
-		{
-			manoJugadorActual.DeseleccionarTodasLasCartas();
-		}
+        // Deseleccionar todas las cartas
+        if (manoJugadorActual != null)
+        {
+            manoJugadorActual.DeseleccionarTodasLasCartas();
+        }
 
-		// ✅ REACTIVAR BOTÓN DE TIRAR DADO (si todavía es nuestro turno)
-		bool esTurnoJugador = GameManager.Instance != null && 
-							  GameManager.Instance.currentPlayerIndex == 0 &&
-							  GameManager.Instance.currentPhase == GamePhase.TotemMovement;
-		
-		if (esTurnoJugador && UIManager.Instance != null)
-		{
-			UIManager.Instance.SetDiceButtonVisibility(true);
-		}
+        // Reactivar botón de tirar dado (si todavía es nuestro turno)
+        bool esTurnoJugador = GameManager.Instance != null && 
+                              GameManager.Instance.currentPlayerIndex == 0 &&
+                              GameManager.Instance.currentPhase == GamePhase.TotemMovement;
+        
+        if (esTurnoJugador && UIManager.Instance != null)
+        {
+            UIManager.Instance.SetDiceButtonVisibility(true);
+        }
 
-		// Terminar el turno
-		cartaEnUso = false;
-		TerminarTurnoDespuesDeUsarCarta();
-	}
+        // Terminar el turno
+        cartaEnUso = false;
+        TerminarTurnoDespuesDeUsarCarta();
+    }
 
+    /// <summary>
+    /// Termina el turno después de usar una carta de acción
+    /// </summary>
     private void TerminarTurnoDespuesDeUsarCarta()
     {
-        Debug.Log("🔄 Terminando turno después de usar carta de acción...");
         StartCoroutine(TerminarTurnoCoroutine());
     }
 
+    /// <summary>
+    /// Corrutina para terminar el turno con delay
+    /// </summary>
     private IEnumerator TerminarTurnoCoroutine()
     {
         yield return new WaitForSeconds(0.5f);
@@ -599,55 +552,55 @@ public class GestionBotonesCartas : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// Fuerza la actualización del estado del botón
+    /// </summary>
     public void ForzarActualizacionBoton()
     {
         ActualizarEstadoBoton();
     }
 
-    [ContextMenu("Debug Estado Botón")]
-    public void DebugEstadoBoton()
+    /// <summary>
+    /// Se llama cuando se activa el dado
+    /// </summary>
+    public void OnDiceActivated()
     {
-        Debug.Log("=== DEBUG BOTÓN UTILIZAR ===");
-        Debug.Log($"- Botón activo: {botonUtilizar?.gameObject.activeInHierarchy}");
-        Debug.Log($"- Carta seleccionada: {cartaSeleccionada?.name}");
-        Debug.Log($"- Esperando selección: {esperandoSeleccionObjetivo}");
-        Debug.Log($"- Jugador objetivo: {jugadorObjetivoID}");
-        Debug.Log($"- Texto mensaje activo: {textoMensaje?.gameObject.activeInHierarchy}");
+        OcultarBotonUtilizar();
+        
+        // Deseleccionar cualquier carta seleccionada permanentemente
+        if (manoJugadorActual != null)
+        {
+            manoJugadorActual.DeseleccionarTodasLasCartas();
+            cartaSeleccionada = null;
+        }
+        
+        // Asegurar que no se pueda volver a seleccionar cartas de acción
+        if (GameManager.Instance != null)
+        {
+            GameManager.Instance.dadoTiradoEnEsteTurno = true;
+        }
     }
-	public void OnDiceActivated()
-	{
-		Debug.Log("🎲 Dado activado - Ocultando botón Utilizar y deseleccionando cartas");
-		OcultarBotonUtilizar();
-		
-		// Deseleccionar cualquier carta seleccionada PERMANENTEMENTE
-		if (manoJugadorActual != null)
-		{
-			manoJugadorActual.DeseleccionarTodasLasCartas();
-			cartaSeleccionada = null;
-		}
-		
-		// Asegurar que no se pueda volver a seleccionar cartas de acción
-		if (GameManager.Instance != null)
-		{
-			GameManager.Instance.dadoTiradoEnEsteTurno = true;
-		}
-	}
 
-	public void OnDiceDeactivated()
-	{
-		Debug.Log("🎲 Dado desactivado - Revisando estado del botón Utilizar");
-		// Esperar un frame para que se actualice el estado del juego
-		StartCoroutine(RevisarEstadoBotonDespuesDeDado());
-	}
+    /// <summary>
+    /// Se llama cuando se desactiva el dado
+    /// </summary>
+    public void OnDiceDeactivated()
+    {
+        // Esperar un frame para que se actualice el estado del juego
+        StartCoroutine(RevisarEstadoBotonDespuesDeDado());
+    }
 
-	private IEnumerator RevisarEstadoBotonDespuesDeDado()
-	{
-		yield return null; // Esperar un frame
-		
-		// Solo actualizar si no estamos en medio de una acción de carta
-		if (!esperandoSeleccionObjetivo && !cartaEnUso)
-		{
-			ActualizarEstadoBoton();
-		}
-	}
+    /// <summary>
+    /// Revisa el estado del botón después de usar el dado
+    /// </summary>
+    private IEnumerator RevisarEstadoBotonDespuesDeDado()
+    {
+        yield return null;
+        
+        // Solo actualizar si no estamos en medio de una acción de carta
+        if (!esperandoSeleccionObjetivo && !cartaEnUso)
+        {
+            ActualizarEstadoBoton();
+        }
+    }
 }
