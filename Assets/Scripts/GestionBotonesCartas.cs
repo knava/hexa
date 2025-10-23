@@ -540,7 +540,7 @@ public class GestionBotonesCartas : MonoBehaviour
     }
 
     // Método: Terminar el uso de la Dinamita
-    private void TerminarUsoDinamita()
+    public void TerminarUsoDinamita()
 	{
 		Debug.Log("🔚 Terminando uso de Dinamita");
 		

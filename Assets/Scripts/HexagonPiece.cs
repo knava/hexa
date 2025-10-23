@@ -251,7 +251,6 @@ public class HexagonPiece : MonoBehaviour
         Vector3 startPos = transform.position;
         Vector3 raisedPosition = startPos + Vector3.up * 0.5f;
 
-        float totalDuration = 1f;
         float liftDuration = 0.2f;
         float moveDuration = 0.6f;
         float descendDuration = 0.2f;

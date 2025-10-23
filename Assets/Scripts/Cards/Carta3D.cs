@@ -7,18 +7,28 @@ public class Carta3D : MonoBehaviour
     public Material frenteMaterial;
     
     [Header("Referencias")]
-    public GameObject borde; // Asignar desde el inspector el GameObject "Borde"
+    public GameObject borde; // GameObject "Borde" para selección visual
 
+    // Componentes y referencias
     private MeshRenderer meshRenderer;
+    private MazoFisico mazoPadre;
+    
+    // Estados de la carta
     private bool bocaAbajo = true;
     private bool puedeGirar = true;
-    private MazoFisico mazoPadre;
     private bool esRoboPorComer = false;
     private bool enManoIA = false;
+    
+    // Escalas para diferentes contextos
     private Vector3 escalaHumano = new Vector3(1.2f, 1.6f, 2f);
     private Vector3 escalaIA = new Vector3(0.84f, 1.12f, 1.4f);
     
+    // Estado de selección
     private bool estaSeleccionada = false;
+    
+    /// <summary>
+    /// Propiedad para controlar el estado de selección de la carta
+    /// </summary>
     public bool EstaSeleccionada 
     { 
         get { return estaSeleccionada; } 
@@ -32,17 +42,13 @@ public class Carta3D : MonoBehaviour
     {
         meshRenderer = GetComponent<MeshRenderer>();
         
-        // Si no se asignó el borde desde el inspector, buscarlo automáticamente
+        // Buscar automáticamente el borde si no está asignado
         if (borde == null)
         {
             borde = transform.Find("Borde")?.gameObject;
-            if (borde == null)
-            {
-                Debug.LogWarning("⚠️ No se encontró GameObject 'Borde' en los hijos");
-            }
         }
         
-        // Asegurar collider
+        // Asegurar que la carta tiene collider
         if (GetComponent<Collider>() == null)
         {
             gameObject.AddComponent<BoxCollider>();
@@ -52,87 +58,99 @@ public class Carta3D : MonoBehaviour
         MostrarDorso();
     }
 
+    /// <summary>
+    /// Establece la referencia al mazo padre
+    /// </summary>
     public void SetMazoPadre(MazoFisico mazo)
     {
         mazoPadre = mazo;
     }
     
+    /// <summary>
+    /// Establece si la carta está en modo robo por comer
+    /// </summary>
     public void SetEsRoboPorComer(bool estado)
     {
         esRoboPorComer = estado;
     }
 
+    /// <summary>
+    /// Maneja el clic del mouse en la carta
+    /// </summary>
     void OnMouseDown()
-	{
-		Debug.Log("Clic detectado en carta: " + gameObject.name);
-		
-		// Verificar si está en modo selección de Dinamita
-		ManoJugador mano = GetComponentInParent<ManoJugador>();
-		if (mano != null && mano.seleccionDinamitaHabilitada)
-		{
-			mano.ProcesarClicCartaDinamita(gameObject);
-			return;
-		}
-		
-		// Lógica existente para otros casos...
-		bool esJugadorHumano = EstaEnManoJugador1() && !enManoIA;
-		
-		if (esJugadorHumano)
-		{
-			// Usar el sistema de selección única del ManoJugador
-			if (mano != null)
-			{
-				mano.SeleccionarCarta(gameObject);
-			}
-			return;
-		}
-		
-		if (esRoboPorComer)
-		{
-			// Delegar al sistema de robo por comer
-			if (mazoPadre != null)
-			{
-				mazoPadre.ProcesarClicCarta(gameObject);
-			}
-			return;
-		}
-		
-		if (puedeGirar && mazoPadre != null && bocaAbajo)
-		{
-			// Lógica original de robo normal
-			mazoPadre.ProcesarClicCarta(gameObject);
-		}
-	}
+    {
+        // Verificar si está en modo selección de Dinamita
+        ManoJugador mano = GetComponentInParent<ManoJugador>();
+        if (mano != null && mano.seleccionDinamitaHabilitada)
+        {
+            mano.ProcesarClicCartaDinamita(gameObject);
+            return;
+        }
+        
+        bool esJugadorHumano = EstaEnManoJugador1() && !enManoIA;
+        
+        if (esJugadorHumano)
+        {
+            // Usar el sistema de selección única del ManoJugador
+            if (mano != null)
+            {
+                mano.SeleccionarCarta(gameObject);
+            }
+            return;
+        }
+        
+        if (esRoboPorComer)
+        {
+            // Delegar al sistema de robo por comer
+            if (mazoPadre != null)
+            {
+                mazoPadre.ProcesarClicCarta(gameObject);
+            }
+            return;
+        }
+        
+        // Lógica original de robo normal
+        if (puedeGirar && mazoPadre != null && bocaAbajo)
+        {
+            mazoPadre.ProcesarClicCarta(gameObject);
+        }
+    }
 
+    /// <summary>
+    /// Verifica si la carta está en la mano del jugador humano (Jugador 1)
+    /// </summary>
     private bool EstaEnManoJugador1()
     {
         ManoJugador mano = GetComponentInParent<ManoJugador>();
         if (mano != null)
         {
-            Debug.Log($"✅ Carta en mano del jugador {mano.playerID} - Es Jugador 1: {mano.playerID == 1}");
             return mano.playerID == 1 && !mano.esIA;
         }
         
-        Debug.Log("❌ No se encontró componente ManoJugador en parents");
         return false;
     }
 
+    /// <summary>
+    /// Actualiza la visibilidad del borde según el estado de selección
+    /// </summary>
     private void ActualizarBorde()
     {
         if (borde != null)
         {
             borde.SetActive(estaSeleccionada);
-            Debug.Log($"{(estaSeleccionada ? "✅" : "❌")} Borde {(estaSeleccionada ? "activado" : "desactivado")}");
         }
     }
 
+    /// <summary>
+    /// Gira la carta con animación
+    /// </summary>
     public void GirarCartaConAnimacion()
     {
         if (puedeGirar)
         {
             puedeGirar = false;
-            Debug.Log("Iniciando animación de giro...");
             
+            // Animación de giro en dos fases
             LeanTween.rotateY(gameObject, 90f, 0.5f)
                 .setOnComplete(() => {
                     // Cambiar material durante el giro
@@ -145,11 +163,13 @@ public class Carta3D : MonoBehaviour
                         meshRenderer.material = dorsoMaterial;
                     }
                     
+                    // Segunda fase de la animación
                     LeanTween.rotateY(gameObject, 0f, 0.5f)
                         .setOnComplete(() => {
                             bocaAbajo = !bocaAbajo;
                             puedeGirar = true;
                             
+                            // Notificar al mazo cuando se completa el giro
                             if (mazoPadre != null && !bocaAbajo)
                             {
                                 mazoPadre.AgregarCartaAMano(gameObject);
@@ -159,6 +179,9 @@ public class Carta3D : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// Muestra el dorso de la carta
+    /// </summary>
     public void MostrarDorso()
     {
         bocaAbajo = true;
@@ -168,6 +191,9 @@ public class Carta3D : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// Muestra el frente de la carta
+    /// </summary>
     public void MostrarFrente()
     {
         bocaAbajo = false;
@@ -177,44 +203,56 @@ public class Carta3D : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// Establece el material frontal de la carta
+    /// </summary>
     public void SetFrenteMaterial(Material nuevoFrente)
     {
         frenteMaterial = nuevoFrente;
     }
 
+    /// <summary>
+    /// Habilita o deshabilita la capacidad de girar la carta
+    /// </summary>
     public void SetPuedeGirar(bool estado)
     {
         puedeGirar = estado;
     }
 
+    /// <summary>
+    /// Obtiene el material frontal de la carta
+    /// </summary>
     public Material GetFrenteMaterial()
     {
         return frenteMaterial;
     }
     
+    /// <summary>
+    /// Establece si la carta está en mano de IA y ajusta la escala
+    /// </summary>
     public void SetEnManoIA(bool esIA)
-	{
-		enManoIA = esIA;
-		
-		// Actualizar escala inmediatamente
-		if (esIA)
-		{
-			transform.localScale = escalaIA;
-		}
-		else
-		{
-			// ✅ Usar escala estándar cuando no está en mano de IA
-			transform.localScale = escalaHumano;
-		}
-		
-		Debug.Log($"🤖 Carta asignada a {(esIA ? "IA" : "Humano")} - Escala: {transform.localScale}");
-	}
+    {
+        enManoIA = esIA;
+        
+        // Actualizar escala inmediatamente
+        if (esIA)
+        {
+            transform.localScale = escalaIA;
+        }
+        else
+        {
+            transform.localScale = escalaHumano;
+        }
+    }
 
+    /// <summary>
+    /// Cambia la escala de la carta según el tipo de dueño
+    /// </summary>
     public void CambiarEscala(bool nuevoEsIA)
     {
         if (nuevoEsIA == enManoIA)
         {
-            // Si sigue siendo el mismo tipo (IA->IA o Humano->Humano), no cambiar escala
+            // Si sigue siendo el mismo tipo, no cambiar escala
             return;
         }
         
@@ -226,6 +264,9 @@ public class Carta3D : MonoBehaviour
             .setEase(LeanTweenType.easeOutBack);
     }
     
+    /// <summary>
+    /// Obtiene el tipo de carta basado en su material frontal
+    /// </summary>
     public CardType GetTipoCarta()
     {
         if (MazoFisico.Instance == null) return CardType.Piedra;
@@ -237,41 +278,34 @@ public class Carta3D : MonoBehaviour
         else if (frenteMaterial == MazoFisico.Instance.frenteDinamita)
             return CardType.Dinamita;
         else
-            return CardType.Piedra; // Por defecto
+            return CardType.Piedra; // Tipo por defecto
     }
     
+    /// <summary>
+    /// Verifica si la carta es de acción (Dinamita)
+    /// </summary>
     public bool EsCartaDeAccion()
     {
         return GetTipoCarta() == CardType.Dinamita;
     }
     
+    /// <summary>
+    /// Deselecciona la carta
+    /// </summary>
     public void Deseleccionar()
-	{
-		if (estaSeleccionada)
-		{
-			estaSeleccionada = false;
-			ActualizarBorde();
-			Debug.Log($"🔴 Carta {gameObject.name} deseleccionada");
-		}
-	}
+    {
+        if (estaSeleccionada)
+        {
+            estaSeleccionada = false;
+            ActualizarBorde();
+        }
+    }
     
-    // Método público para diagnóstico
+    /// <summary>
+    /// Obtiene si la carta está en mano de IA
+    /// </summary>
     public bool GetEnManoIA()
     {
         return enManoIA;
-    }
-    
-    // Método para debug
-    [ContextMenu("Debug Estado Carta")]
-    public void DebugEstadoCarta()
-    {
-        Debug.Log($"🃏 Estado Carta {gameObject.name}:");
-        Debug.Log($"- Seleccionada: {estaSeleccionada}");
-        Debug.Log($"- BocaAbajo: {bocaAbajo}");
-        Debug.Log($"- EnManoIA: {enManoIA}");
-        Debug.Log($"- Tipo: {GetTipoCarta()}");
-        Debug.Log($"- Es Acción: {EsCartaDeAccion()}");
-        Debug.Log($"- Parent: {transform.parent?.name}");
-        Debug.Log($"- Borde: {(borde != null ? "Asignado" : "Null")}");
     }
 }
