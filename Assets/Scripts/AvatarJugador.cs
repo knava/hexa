@@ -110,7 +110,7 @@ public class AvatarJugador : MonoBehaviour
         }
     }
 
-    // NUEVO MÉTODO: Aplicar icono al avatar
+    // NUEVO MÉTODO: Aplicar icono al avatard
     public void AplicarIcono(Sprite icono)
     {
         // Si tenemos un renderer de icono específico, aplicamos el sprite como textura

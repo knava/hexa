@@ -26,6 +26,9 @@ public class GestionBotonesCartas : MonoBehaviour
     private bool esperandoSeleccionObjetivo = false;
     private int jugadorObjetivoID = -1;
     private CardType tipoCartaEnUso;
+	private int maxCartasParaSeleccionar = 0;
+	private int cartasDescartadasCount = 0; 
+	private ManoJugador manoObjetivoActual;
 
     void Awake()
     {
@@ -358,6 +361,9 @@ public class GestionBotonesCartas : MonoBehaviour
 	{
 		Debug.Log("❌ Selección de objetivo cancelada");
 		
+		// Limpiar estado del descarte
+		LimpiarEstadoDescarte();
+		
 		// Ocultar solo el texto (no el panel completo)
 		OcultarMensaje();
 		
@@ -423,61 +429,79 @@ public class GestionBotonesCartas : MonoBehaviour
 	
 	private void IniciarSeleccionCartasParaDescarte(ManoJugador manoObjetivo, int cartasADescartar)
 	{
-		Debug.Log($"🎯 Iniciando selección de {cartasADescartar} cartas para descartar");
+		Debug.Log($"🎯 Iniciando selección de {cartasADescartar} cartas para descarte INMEDIATO");
 		
-		// Mostrar mensaje al jugador
-		MostrarMensaje($"Selecciona {cartasADescartar} cartas del Jugador {manoObjetivo.playerID} para descartar");
+		// Guardar referencias y resetear contadores
+		this.maxCartasParaSeleccionar = cartasADescartar;
+		this.cartasDescartadasCount = 0;
+		this.manoObjetivoActual = manoObjetivo;
 		
-		// Habilitar las cartas del jugador objetivo para selección
+		// Mostrar mensaje inicial
+		MostrarMensaje($"Selecciona {cartasADescartar} carta(s) para descartar (0/{cartasADescartar})");
+		
+		// Habilitar las cartas del jugador objetivo para selección INMEDIATA
 		manoObjetivo.HabilitarCartasParaSeleccionDinamita(cartasADescartar);
 		
-		// Iniciar corrutina que espera la selección
-		StartCoroutine(EsperarSeleccionCartas(manoObjetivo, cartasADescartar));
-	}
-	
-	private IEnumerator EsperarSeleccionCartas(ManoJugador manoObjetivo, int cartasADescartar)
-	{
-		// Esperar a que se seleccionen las cartas requeridas
-		while (manoObjetivo.CartasSeleccionadasParaDinamita.Count < cartasADescartar)
-		{
-			yield return null;
-		}
-		
-		Debug.Log($"✅ Selección completada - {cartasADescartar} cartas seleccionadas");
-		
-		// Proceder con el descarte de las cartas seleccionadas
-		ProcesarDescarteDinamita(manoObjetivo);
+		Debug.Log("🖱️ Modo descarte inmediato activado - Cada clic descarta una carta");
 	}
 	
 	private void ProcesarDescarteDinamita(ManoJugador manoObjetivo)
 	{
-		Debug.Log($"🗑️ Procesando descarte de cartas seleccionadas...");
+		Debug.Log($"🎯 Iniciando proceso de descarte inmediato");
+		// El descarte ahora se maneja carta por carta mediante clics inmediatos
+	}
+
+	// NUEVO: Corrutina para descarte inmediato carta por carta
+	private IEnumerator ProcesarDescarteInmediatoCoroutine(List<GameObject> cartasSeleccionadas, ManoJugador manoObjetivo)
+	{
+		Debug.Log($"🎯 Iniciando descarte inmediato de {cartasSeleccionadas.Count} cartas...");
 		
-		// Obtener las cartas seleccionadas
-		List<GameObject> cartasSeleccionadas = new List<GameObject>(manoObjetivo.CartasSeleccionadasParaDinamita);
+		// Mostrar mensaje inicial
+		MostrarMensaje($"Descartando {cartasSeleccionadas.Count} cartas...");
 		
-		// Mover cada carta seleccionada al descarte
-		foreach (GameObject carta in cartasSeleccionadas)
+		// Descarte carta por carta con animaciones (igual que la IA)
+		for (int i = 0; i < cartasSeleccionadas.Count; i++)
 		{
-			if (MazoDescarte.Instance != null)
+			GameObject carta = cartasSeleccionadas[i];
+			if (carta != null && MazoDescarte.Instance != null)
 			{
+				// Mostrar progreso
+				MostrarMensaje($"Descartando carta {i+1}/{cartasSeleccionadas.Count}");
+				
+				// Efecto visual de selección
+				LeanTween.moveLocal(carta, carta.transform.localPosition + Vector3.up * 0.5f, 0.3f)
+					.setEase(LeanTweenType.easeOutBack);
+				
+				yield return new WaitForSeconds(0.5f);
+				
 				// ✅ Asegurar que la carta tenga la escala correcta antes de mover al descarte
 				Carta3D cartaScript = carta.GetComponent<Carta3D>();
 				if (cartaScript != null)
 				{
 					cartaScript.SetEnManoIA(false); // Forzar escala estándar
+					cartaScript.Deseleccionar(); // Quitar selección visual
 				}
 				
+				// Animación al descarte
+				Vector3 posicionDescarte = MazoDescarte.Instance.transform.position;
+				LeanTween.move(carta, posicionDescarte, 0.8f)
+					.setEase(LeanTweenType.easeInOutCubic);
+				
+				LeanTween.rotate(carta, new Vector3(90f, 0f, 0f), 0.5f);
+				
+				yield return new WaitForSeconds(0.8f);
+				
+				// Mover efectivamente al descarte
 				MazoDescarte.Instance.AgregarCartaDescarte(carta);
 				manoObjetivo.RemoverCarta(carta);
-				Debug.Log($"🗑️ Carta descartada: {carta.name}");
+				
+				yield return new WaitForSeconds(0.3f);
 			}
 		}
 		
-		// Limpiar la selección de dinamita
-		manoObjetivo.LimpiarSeleccionDinamita();
-		
-		// Ocultar mensaje
+		// Mensaje final
+		MostrarMensaje($"¡{cartasSeleccionadas.Count} cartas descartadas!");
+		yield return new WaitForSeconds(1f);
 		OcultarMensaje();
 		
 		// Terminar el uso de la Dinamita
@@ -488,61 +512,121 @@ public class GestionBotonesCartas : MonoBehaviour
 	
 	public void CancelarSeleccionCartas()
 	{
-		if (jugadorObjetivoID != -1)
-		{
-			// Obtener la mano del jugador objetivo
-			if (MazoFisico.Instance != null && 
-				MazoFisico.Instance.manosJugadores.TryGetValue(jugadorObjetivoID, out ManoJugador manoObjetivo))
-			{
-				manoObjetivo.LimpiarSeleccionDinamita();
-			}
-		}
-		
-		OcultarMensaje();
-		Debug.Log("❌ Selección de cartas cancelada");
+		CancelarSeleccionCartasSegura();
+	}
+	
+	public void ProcesarDescarteInmediatoDeCarta(GameObject carta, ManoJugador manoObjetivo)
+	{
+		StartCoroutine(ProcesarDescarteIndividualCoroutine(carta, manoObjetivo));
 	}
 
-    // Método: Proceso de descarte con la Dinamita
-    private IEnumerator ProcesoDescarteDinamita(ManoJugador manoObjetivo, int cartasADescartar)
-    {
-        Debug.Log($"🃏 Iniciando descarte de {cartasADescartar} cartas...");
-        
-        // Obtener todas las cartas de la mano objetivo
-        List<GameObject> cartasEnMano = manoObjetivo.GetCartas();
-        
-        // Para el Jugador 1 (humano), permitir seleccionar qué cartas descartar
-        // Por ahora, descartamos aleatoriamente (luego implementaremos selección)
-        for (int i = 0; i < cartasADescartar && cartasEnMano.Count > 0; i++)
-        {
-            // Seleccionar carta aleatoria para descartar
-            int indiceAleatorio = Random.Range(0, cartasEnMano.Count);
-            GameObject cartaADescartar = cartasEnMano[indiceAleatorio];
-            
-            // Mover al descarte
-            if (MazoDescarte.Instance != null)
-            {
-                MazoDescarte.Instance.AgregarCartaDescarte(cartaADescartar);
-                manoObjetivo.RemoverCarta(cartaADescartar);
-                Debug.Log($"🗑️ Carta {i+1}/{cartasADescartar} descartada");
-            }
-            
-            // Pequeño delay entre descartes
-            yield return new WaitForSeconds(0.3f);
-            
-            // Actualizar lista
-            cartasEnMano = manoObjetivo.GetCartas();
-        }
-        
-        Debug.Log($"✅ Descarte completado - {cartasADescartar} cartas descartadas");
-        
-        // Terminar el uso de la Dinamita
-        TerminarUsoDinamita();
-    }
+	// NUEVO: Corrutina para descarte individual
+	private IEnumerator ProcesarDescarteIndividualCoroutine(GameObject carta, ManoJugador manoObjetivo)
+	{
+		Debug.Log($"🎯 Iniciando descarte inmediato de carta: {carta.name}");
+		
+		if (carta == null || MazoDescarte.Instance == null)
+		{
+			yield break;
+		}
+		
+		// Incrementar contador de cartas descartadas
+		cartasDescartadasCount++;
+		
+		Debug.Log($"📊 Progreso actual: {cartasDescartadasCount}/{maxCartasParaSeleccionar} cartas descartadas");
+		
+		// Mostrar mensaje de descarte
+		MostrarMensaje($"Descartando carta {cartasDescartadasCount}/{maxCartasParaSeleccionar}");
+		
+		// Efecto visual antes del descarte
+		LeanTween.moveLocal(carta, carta.transform.localPosition + Vector3.up * 1.0f, 0.3f)
+			.setEase(LeanTweenType.easeOutBack);
+		
+		yield return new WaitForSeconds(0.3f);
+		
+		// ✅ Asegurar que la carta tenga la escala correcta
+		Carta3D cartaScript = carta.GetComponent<Carta3D>();
+		if (cartaScript != null)
+		{
+			cartaScript.SetEnManoIA(false);
+			cartaScript.Deseleccionar();
+		}
+		
+		// Animación al descarte
+		Vector3 posicionDescarte = MazoDescarte.Instance.transform.position;
+		LeanTween.move(carta, posicionDescarte, 0.8f)
+			.setEase(LeanTweenType.easeInOutCubic);
+		
+		LeanTween.rotate(carta, new Vector3(90f, 0f, 0f), 0.5f);
+		
+		yield return new WaitForSeconds(0.8f);
+		
+		// Mover efectivamente al descarte
+		MazoDescarte.Instance.AgregarCartaDescarte(carta);
+		manoObjetivo.RemoverCarta(carta);
+		
+		// IMPORTANTE: Solo remover de la selección, no llamar a ActualizarMensajeProgreso
+		if (manoObjetivo.CartasSeleccionadasParaDinamita.Contains(carta))
+		{
+			manoObjetivo.CartasSeleccionadasParaDinamita.Remove(carta);
+		}
+		
+		yield return new WaitForSeconds(0.3f);
+		
+		// Verificar si ya se descartaron todas las cartas necesarias
+		if (cartasDescartadasCount >= maxCartasParaSeleccionar)
+		{
+			Debug.Log($"✅ TODAS las cartas descartadas: {cartasDescartadasCount}/{maxCartasParaSeleccionar}");
+			
+			// Mensaje final
+			MostrarMensaje($"¡Todas las cartas descartadas! ({maxCartasParaSeleccionar}/{maxCartasParaSeleccionar})");
+			yield return new WaitForSeconds(1.5f);
+			OcultarMensaje();
+			
+			// Limpiar selección
+			if (manoObjetivoActual != null)
+			{
+				manoObjetivoActual.LimpiarSeleccionDinamita();
+			}
+			
+			// Terminar el uso de la Dinamita
+			TerminarUsoDinamita();
+		}
+		else
+		{
+			// Actualizar mensaje de progreso
+			int cartasRestantes = maxCartasParaSeleccionar - cartasDescartadasCount;
+			MostrarMensaje($"Selecciona {cartasRestantes} carta(s) más para descartar ({cartasDescartadasCount}/{maxCartasParaSeleccionar})");
+		}
+	}
+	
+	private void LimpiarEstadoDescarte()
+	{
+		cartasDescartadasCount = 0;
+		maxCartasParaSeleccionar = 0;
+		manoObjetivoActual = null;
+	}
 
+	public void DescarteCompletado()
+	{
+		Debug.Log("✅ Descarte completado - Terminando uso de Dinamita");
+		
+		StartCoroutine(TerminarDescarteCoroutine());
+	}
+	
+	private IEnumerator TerminarDescarteCoroutine()
+	{
+		yield return new WaitForSeconds(1f);
+		OcultarMensaje();
+		TerminarUsoDinamita();
+	}
+	
     // Método: Terminar el uso de la Dinamita
     public void TerminarUsoDinamita()
 	{
 		Debug.Log("🔚 Terminando uso de Dinamita");
+		
+		LimpiarEstadoDescarte();
 		
 		// Mover la carta de dinamita al descarte
 		if (cartaSeleccionada != null && manoJugadorActual != null)
@@ -581,6 +665,31 @@ public class GestionBotonesCartas : MonoBehaviour
 		// Terminar el turno
 		cartaEnUso = false;
 		TerminarTurnoDespuesDeUsarCarta();
+	}
+	
+	public void CancelarSeleccionCartasSegura()
+	{
+		if (jugadorObjetivoID != -1)
+		{
+			// Obtener la mano del jugador objetivo
+			if (MazoFisico.Instance != null && 
+				MazoFisico.Instance.manosJugadores.TryGetValue(jugadorObjetivoID, out ManoJugador manoObjetivo))
+			{
+				// Si ya hay cartas seleccionadas, procesarlas antes de cancelar
+				if (manoObjetivo.CartasSeleccionadasParaDinamita.Count > 0)
+				{
+					Debug.Log($"⚠️ Procesando {manoObjetivo.CartasSeleccionadasParaDinamita.Count} cartas seleccionadas antes de cancelar");
+					ProcesarDescarteDinamita(manoObjetivo);
+				}
+				else
+				{
+					manoObjetivo.LimpiarSeleccionDinamita();
+				}
+			}
+		}
+		
+		OcultarMensaje();
+		Debug.Log("❌ Selección de cartas cancelada de forma segura");
 	}
 
     private void TerminarTurnoDespuesDeUsarCarta()

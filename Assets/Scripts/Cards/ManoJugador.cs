@@ -71,17 +71,12 @@ public class ManoJugador : MonoBehaviour
 		seleccionDinamitaHabilitada = true;
 		CartasSeleccionadasParaDinamita.Clear();
 		
-		Debug.Log($"ðŸŽ¯ Habilitada selecciÃ³n de hasta {maxSeleccion} cartas para Dinamita");
+		Debug.Log($"?? Habilitada selecci¨®n de {maxSeleccion} cartas para descarte INMEDIATO");
 		
-		// Aplicar efecto visual a las cartas
-		foreach (GameObject carta in cartasEnMano)
+		// Mostrar mensaje inicial CORRECTO
+		if (GestionBotonesCartas.Instance != null)
 		{
-			if (carta != null)
-			{
-				// Feedback visual para indicar que son seleccionables
-				LeanTween.moveLocal(carta, carta.transform.localPosition + Vector3.up * 0.3f, 0.3f)
-					.setEase(LeanTweenType.easeOutBack);
-			}
+			GestionBotonesCartas.Instance.MostrarMensaje($"Selecciona {maxSeleccion} carta(s) para descartar (0/{maxSeleccion})");
 		}
 	}
 
@@ -92,32 +87,48 @@ public class ManoJugador : MonoBehaviour
 		
 		Carta3D cartaScript = carta.GetComponent<Carta3D>();
 		if (cartaScript == null) return;
-		
+
+		// Verificar que no estamos procesando ya esta carta
 		if (CartasSeleccionadasParaDinamita.Contains(carta))
 		{
-			// Deseleccionar carta
-			CartasSeleccionadasParaDinamita.Remove(carta);
-			cartaScript.EstaSeleccionada = false;
-			Debug.Log($"ðŸ”´ Carta deseleccionada para Dinamita - Total: {CartasSeleccionadasParaDinamita.Count}/{maxCartasParaSeleccionar}");
-			
-			// Efecto visual de deselecciÃ³n
-			LeanTween.moveLocal(carta, Vector3.zero, 0.2f)
-				.setEase(LeanTweenType.easeOutBack);
+			Debug.Log($"?? Carta ya est¨¢ siendo procesada: {carta.name}");
+			return;
 		}
-		else if (CartasSeleccionadasParaDinamita.Count < maxCartasParaSeleccionar)
+
+		// Agregar temporalmente a la selecci¨®n para evitar doble clic
+		CartasSeleccionadasParaDinamita.Add(carta);
+		cartaScript.EstaSeleccionada = true;
+		
+		Debug.Log($"?? Carta seleccionada para descarte inmediato");
+
+		// Efecto visual de selecci¨®n
+		LeanTween.moveLocal(carta, carta.transform.localPosition + Vector3.up * 0.8f, 0.3f)
+			.setEase(LeanTweenType.easeOutBack);
+
+		// Iniciar descarte inmediato
+		if (GestionBotonesCartas.Instance != null)
 		{
-			// Seleccionar carta
-			CartasSeleccionadasParaDinamita.Add(carta);
-			cartaScript.EstaSeleccionada = true;
-			Debug.Log($"ðŸŸ¢ Carta seleccionada para Dinamita - Total: {CartasSeleccionadasParaDinamita.Count}/{maxCartasParaSeleccionar}");
-			
-			// Efecto visual de selecciÃ³n
-			LeanTween.moveLocal(carta, carta.transform.localPosition + Vector3.up * 0.5f, 0.2f)
-				.setEase(LeanTweenType.easeOutBack);
+			GestionBotonesCartas.Instance.ProcesarDescarteInmediatoDeCarta(carta, this);
+		}
+	}
+
+	// NUEVO: M¨¦todo para descarte inmediato de una carta
+	private void IniciarDescarteInmediato(GameObject carta)
+	{
+		if (MazoDescarte.Instance != null && GestionBotonesCartas.Instance != null)
+		{
+			// Notificar a GestionBotonesCartas para que procese el descarte inmediato
+			GestionBotonesCartas.Instance.ProcesarDescarteInmediatoDeCarta(carta, this);
 		}
 		else
 		{
-			Debug.Log($"âš ï¸ Ya has seleccionado el mÃ¡ximo de {maxCartasParaSeleccionar} cartas");
+			// Fallback: remover de la selecci¨®n si no se puede procesar
+			CartasSeleccionadasParaDinamita.Remove(carta);
+			Carta3D cartaScript = carta.GetComponent<Carta3D>();
+			if (cartaScript != null)
+			{
+				cartaScript.EstaSeleccionada = false;
+			}
 		}
 	}
 
