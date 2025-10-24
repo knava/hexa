@@ -26,7 +26,7 @@ public class HexagonPiece : MonoBehaviour
     };
     
     // Estado de la pieza
-    private List<HexagonPiece> connectedPieces = new List<HexagonPiece>();
+    public List<HexagonPiece> connectedPieces = new List<HexagonPiece>();
     private Renderer hexRenderer;
     private Material originalMaterial;
     private Material targetMaterial;

@@ -22,16 +22,62 @@ public class AIController : MonoBehaviour
     }
 
     /// <summary>
-    /// Inicia el turno de la IA en fase de movimiento
-    /// </summary>
-    public void StartAITurn()
-    {
-        if (GameManager.Instance != null && GameManager.Instance.juegoTerminado) return;
-        if (myTotem == null) return;
-        
-        isMyTurn = true;
-        StartCoroutine(ProcessAITurn());
-    }
+	/// Inicia el turno de la IA en fase de movimiento (versión mejorada)
+	/// </summary>
+	public void StartAITurn()
+	{
+		if (GameManager.Instance != null && GameManager.Instance.juegoTerminado) return;
+		if (myTotem == null) return;
+		
+		isMyTurn = true;
+		
+		// Pequeño delay para simular pensamiento y para que el jugador vea qué pasa
+		StartCoroutine(DelayedAITurn());
+	}
+	
+	private IEnumerator DelayedAITurn()
+	{
+		// Delay inicial para simular pensamiento
+		yield return new WaitForSeconds(1f);
+		
+		// Evaluar uso de cartas de acción al inicio
+		EvaluarUsoCartasAccion();
+		
+		// Si usó carta de acción, terminar turno
+		if (!isMyTurn) yield break;
+		
+		// Esperar a que termine cualquier robo de carta previo
+		while (GameManager.Instance != null && GameManager.Instance.esperandoRoboCarta)
+		{
+			yield return new WaitForSeconds(0.5f);
+		}
+		
+		yield return new WaitForSeconds(0.5f);
+		
+		// Tirar el dado automáticamente
+		GameManager.Instance.ForceDiceRollForAI();
+		
+		// Esperar resultado del dado
+		while (GameManager.Instance.waitingForDiceRoll)
+		{
+			yield return null;
+		}
+		
+		// Manejar robo de carta si cayó en casilla especial
+		if (GameManager.Instance != null && GameManager.Instance.esperandoRoboCarta)
+		{
+			while (GameManager.Instance.esperandoRoboCarta)
+			{
+				yield return null;
+			}
+			
+			GameManager.Instance.EndTurn();
+			yield break;
+		}
+		
+		// Continuar con movimiento normal
+		MakeDecision();
+	}
 
     /// <summary>
     /// Inicia el turno de construcción de la IA
@@ -224,84 +270,169 @@ public class AIController : MonoBehaviour
     }
 
     /// <summary>
-    /// Toma decisión de movimiento basada en el resultado del dado
-    /// </summary>
-    private void MakeDecision()
-    {
-        if (!isMyTurn) return;
-        if (GameManager.Instance != null && GameManager.Instance.esperandoRoboCarta) return;
-        
-        HexagonPiece targetHex = ChooseBestHexagon();
-        if (targetHex != null)
-        {
-            GameManager.Instance.SelectHexagon(targetHex);
-        }
-        else
-        {
-            GameManager.Instance.EndTurn();
-        }
-    }
+	/// Modificar MakeDecision para incluir debug
+	/// </summary>
+	private void MakeDecision()
+	{
+		if (!isMyTurn) return;
+		if (GameManager.Instance != null && GameManager.Instance.esperandoRoboCarta) return;
+		
+		List<HexagonPiece> selectableHexagons = GameManager.Instance.selectableHexagons;
+		
+		// Debug de la decisión
+		DebugAIDecision(selectableHexagons);
+		
+		HexagonPiece targetHex = ChooseBestHexagon();
+		if (targetHex != null)
+		{
+			Debug.Log($"🎯 IA seleccionó: {targetHex.name} (Enemigo: {HasEnemyTotem(targetHex)}, RobarCarta: {targetHex.isStealCardPiece})");
+			GameManager.Instance.SelectHexagon(targetHex);
+		}
+		else
+		{
+			Debug.Log("🎯 IA no encontró hexágono adecuado - Pasando turno");
+			GameManager.Instance.EndTurn();
+		}
+	}
+	
+	/// <summary>
+	/// Muestra información de debug sobre las decisiones de la IA
+	/// </summary>
+	private void DebugAIDecision(List<HexagonPiece> selectableHexagons)
+	{
+		if (selectableHexagons == null) return;
+		
+		Debug.Log($"=== 🤖 DECISIÓN IA Jugador {myTotem.playerID} ===");
+		
+		int priority1 = selectableHexagons.Count(hex => !hex.isMainPiece && HasEnemyTotem(hex) && hex.isStealCardPiece);
+		int priority2 = selectableHexagons.Count(hex => !hex.isMainPiece && HasEnemyTotem(hex) && !hex.isStealCardPiece);
+		int priority3 = selectableHexagons.Count(hex => hex.isStealCardPiece && !HasEnemyTotem(hex));
+		
+		Debug.Log($"- Prioridad 1 (Enemigo + Robar carta): {priority1}");
+		Debug.Log($"- Prioridad 2 (Solo enemigo): {priority2}");
+		Debug.Log($"- Prioridad 3 (Solo robar carta): {priority3}");
+		Debug.Log($"- Total hexágonos disponibles: {selectableHexagons.Count}");
+	}
 
     /// <summary>
     /// Elige el mejor hexágono para moverse según estrategia de IA
     /// </summary>
     private HexagonPiece ChooseBestHexagon()
-    {
-        List<HexagonPiece> selectableHexagons = GameManager.Instance.selectableHexagons;
-        
-        if (selectableHexagons == null || selectableHexagons.Count == 0)
-        {
-            return null;
-        }
+	{
+		List<HexagonPiece> selectableHexagons = GameManager.Instance.selectableHexagons;
+		
+		if (selectableHexagons == null || selectableHexagons.Count == 0)
+		{
+			return null;
+		}
 
-        HexagonPiece chosenHex = selectableHexagons[0];
-        
-        // Prioridad 1: Buscar hexágonos con enemigos para comer
-        List<HexagonPiece> hexagonsWithEnemies = selectableHexagons
-            .Where(hex => !hex.isMainPiece && HasEnemyTotem(hex))
-            .ToList();
+		// PRIORIDAD 1: Buscar hexágonos con ENEMIGO + CASILLA DE ROBAR CARTA
+		List<HexagonPiece> hexagonsWithEnemyAndStealCard = selectableHexagons
+			.Where(hex => !hex.isMainPiece && HasEnemyTotem(hex) && hex.isStealCardPiece)
+			.ToList();
 
-        if (hexagonsWithEnemies.Count > 0)
-        {
-            return hexagonsWithEnemies[0];
-        }
+		if (hexagonsWithEnemyAndStealCard.Count > 0)
+		{
+			Debug.Log($"🎯 IA: Prioridad 1 - Enemigo + Robar carta encontrado");
+			return hexagonsWithEnemyAndStealCard[0];
+		}
 
-        // Prioridad 2: Buscar cartas de robo
-        foreach (var hex in selectableHexagons)
-        {
-            if (hex.isStealCardPiece)
-            {
-                chosenHex = hex;
-                break;
-            }
-        }
+		// PRIORIDAD 2: Buscar hexágonos con ENEMIGO (sin casilla de robar carta)
+		List<HexagonPiece> hexagonsWithEnemies = selectableHexagons
+			.Where(hex => !hex.isMainPiece && HasEnemyTotem(hex))
+			.ToList();
 
-        // Prioridad 3: Buscar hexágonos del mismo color
-        if (chosenHex == selectableHexagons[0])
-        {
-            foreach (var hex in selectableHexagons)
-            {
-                if (hex.PieceColor == myTotem.playerColor)
-                {
-                    chosenHex = hex;
-                    break;
-                }
-            }
-        }
+		if (hexagonsWithEnemies.Count > 0)
+		{
+			Debug.Log($"🎯 IA: Prioridad 2 - Enemigo encontrado");
+			return hexagonsWithEnemies[0];
+		}
 
-        return chosenHex;
-    }
+		// PRIORIDAD 3: Buscar hexágonos con CASILLA DE ROBAR CARTA (sin enemigo)
+		HexagonPiece stealCardHex = selectableHexagons
+			.FirstOrDefault(hex => hex.isStealCardPiece && !HasEnemyTotem(hex));
+
+		if (stealCardHex != null)
+		{
+			Debug.Log($"🎯 IA: Prioridad 3 - Casilla robar carta encontrada");
+			return stealCardHex;
+		}
+
+		// PRIORIDAD 4: Estrategia original (mismo color, etc.)
+		Debug.Log($"🎯 IA: Prioridad 4 - Aplicando estrategia por color");
+		return ChooseBestHexagonByColor(selectableHexagons);
+	}
+	
+	/// <summary>
+	/// Estrategia por color cuando no hay objetivos prioritarios
+	/// </summary>
+	private HexagonPiece ChooseBestHexagonByColor(List<HexagonPiece> selectableHexagons)
+	{
+		HexagonPiece chosenHex = selectableHexagons[0];
+		
+		// Buscar hexágonos del mismo color
+		foreach (var hex in selectableHexagons)
+		{
+			if (hex.PieceColor == myTotem.playerColor)
+			{
+				chosenHex = hex;
+				break;
+			}
+		}
+
+		// Si no hay del mismo color, buscar el que esté más cerca del centro o tenga mejor posición estratégica
+		if (chosenHex == selectableHexagons[0])
+		{
+			// Estrategia adicional: priorizar hexágonos conectados a más piezas
+			chosenHex = selectableHexagons
+				.OrderByDescending(hex => GetHexagonStrategicValue(hex))
+				.FirstOrDefault();
+		}
+
+		return chosenHex;
+	}
+	
+	/// <summary>
+	/// Calcula el valor estratégico de un hexágono basado en conexiones y posición
+	/// </summary>
+	private int GetHexagonStrategicValue(HexagonPiece hex)
+	{
+		int value = 0;
+		
+		// Valor por conexiones (cuantas más conexiones, mejor)
+		if (hex.connectedPieces != null)
+		{
+			value += hex.connectedPieces.Count * 2;
+		}
+		
+		// Valor por proximidad al centro (asumiendo que el centro es (0,0,0))
+		float distanceToCenter = Vector3.Distance(hex.transform.position, Vector3.zero);
+		value += Mathf.RoundToInt(10f - distanceToCenter); // Más cerca = más valor
+		
+		// Penalizar piezas principales (si es relevante)
+		if (hex.isMainPiece)
+		{
+			value -= 5;
+		}
+		
+		return value;
+	}
 
     /// <summary>
-    /// Verifica si un hexágono tiene totems enemigos
-    /// </summary>
-    private bool HasEnemyTotem(HexagonPiece hex)
-    {
-        return cachedAllTotems.Any(totem => 
-            totem != myTotem && 
-            totem.currentHexagon == hex && 
-            !totem.currentHexagon.isMainPiece);
-    }
+	/// Verifica si un hexágono tiene totems enemigos (versión mejorada)
+	/// </summary>
+	private bool HasEnemyTotem(HexagonPiece hex)
+	{
+		if (cachedAllTotems == null)
+		{
+			cachedAllTotems = FindObjectsByType<PlayerTotem>(FindObjectsSortMode.None);
+		}
+		
+		return cachedAllTotems.Any(totem => 
+			totem != myTotem && 
+			totem.currentHexagon == hex && 
+			!totem.currentHexagon.isMainPiece);
+	}
 
     /// <summary>
     /// Decide qué robar durante el robo por comer
