@@ -29,6 +29,11 @@ public class GestionBotonesCartas : MonoBehaviour
 	private int maxCartasParaSeleccionar = 0;
 	private int cartasDescartadasCount = 0; 
 	private ManoJugador manoObjetivoActual;
+	
+	[Header("Diamante")]
+	public GameObject hexagonoDiamantePrefab; 
+	private GameObject diamanteInstanciado;
+	private bool colocandoDiamante = false;
 
     void Awake()
     {
@@ -56,7 +61,13 @@ public class GestionBotonesCartas : MonoBehaviour
         {
             textoMensaje.gameObject.SetActive(false);
         }
-    }
+		// Ocultar diamante al inicio
+		if (hexagonoDiamantePrefab != null)
+		{
+			hexagonoDiamantePrefab.SetActive(false);
+		}
+		ConfigurarDiamante();
+	}
 
     void Update()
     {
@@ -68,7 +79,186 @@ public class GestionBotonesCartas : MonoBehaviour
         {
             ManejarClicEnAvatar();
         }
+		if (colocandoDiamante && Input.GetMouseButtonDown(0))
+		{
+			ManejarClicEnIman();
+		}
     }
+	
+	private void ConfigurarDiamante()
+	{
+		if (hexagonoDiamantePrefab != null)
+		{
+			// Asegurar que el diamante esté deshabilitado al inicio
+			hexagonoDiamantePrefab.SetActive(false);
+			
+			// Verificar que tenga los componentes necesarios
+			HexagonPiece hexPiece = hexagonoDiamantePrefab.GetComponent<HexagonPiece>();
+			if (hexPiece == null)
+			{
+				Debug.LogError("❌ El objeto Diamante no tiene componente HexagonPiece");
+			}
+			else
+			{
+				// Configurar propiedades específicas del Diamante
+				hexPiece.isFlipped = true; // Ya está "volteado" porque es especial
+				hexPiece.isConnected = false; // No conectado inicialmente
+				hexPiece.SetCollidersEnabled(false); // Deshabilitar colisiones inicialmente
+			}
+			
+			Debug.Log("💎 Diamante configurado correctamente");
+		}
+		else
+		{
+			Debug.LogWarning("⚠️ No hay objeto Diamante asignado en GestionBotonesCartas");
+		}
+	}
+	
+	// NUEVO: Manejar clic en imanes
+	private void ManejarClicEnIman()
+	{
+		if (!colocandoDiamante) return;
+		
+		Ray ray = Camera.main.ScreenPointToRay(Input.mousePosition);
+		RaycastHit[] hits = Physics.RaycastAll(ray, Mathf.Infinity);
+		
+		// Ordenar por distancia para priorizar objetos cercanos
+		System.Array.Sort(hits, (a, b) => a.distance.CompareTo(b.distance));
+		
+		foreach (RaycastHit hit in hits)
+		{
+			Debug.Log($"🖱️ Objeto en rayo: {hit.collider.name} (Capa: {hit.collider.gameObject.layer})");
+			
+			// Buscar si es un imán o está relacionado con uno
+			Transform iman = FindMagnetInHierarchy(hit.collider.transform);
+			
+			if (iman != null)
+			{
+				Debug.Log($"🎯 Iman encontrado: {iman.name}");
+				
+				if (IsMagnetAvailableForDiamante(iman))
+				{
+					Debug.Log($"✅ Iman disponible - Procediendo con colocación");
+					ProcesarClicEnIman(iman);
+					return; // Salir después de encontrar el primer imán válido
+				}
+				else
+				{
+					Debug.Log($"❌ Iman no disponible: {iman.name}");
+				}
+			}
+		}
+		
+		Debug.Log("❌ No se encontró ningún imán clickable en el rayo");
+	}
+	
+	private Transform EncontrarImanCercano(Vector3 position)
+	{
+		if (MagnetSystem.Instance == null) return null;
+		
+		Transform imanCercano = null;
+		float minDistancia = 0.5f; // Radio de búsqueda aumentado
+		float mejorDistancia = float.MaxValue;
+		
+		foreach (Transform magnet in MagnetSystem.Instance.allMagnets)
+		{
+			if (!IsMagnetAvailableForDiamante(magnet)) continue;
+			
+			float distancia = Vector3.Distance(position, magnet.position);
+			if (distancia < minDistancia && distancia < mejorDistancia)
+			{
+				mejorDistancia = distancia;
+				imanCercano = magnet;
+			}
+		}
+		
+		if (imanCercano != null)
+		{
+			Debug.Log($"🔍 Iman cercano encontrado: {imanCercano.name} (distancia: {mejorDistancia:F2})");
+		}
+		
+		return imanCercano;
+	}
+	
+	// NUEVO: Método para obtener razón específica de no disponibilidad
+	private string GetRazonImanNoDisponible(Transform magnet)
+	{
+		if (MagnetSystem.Instance == null) return "Sistema de imanes no disponible";
+		
+		if (!MagnetSystem.Instance.magnetAvailability.ContainsKey(magnet))
+			return "No registrado en el sistema";
+		
+		if (!MagnetSystem.Instance.magnetAvailability[magnet])
+			return "Marcado como no disponible";
+		
+		if (MagnetSystem.Instance.CheckPhysicalOccupation(magnet))
+			return "Ocupado físicamente por otra pieza";
+		
+		HexagonPiece piece = MagnetSystem.Instance.GetPieceForMagnet(magnet);
+		if (piece == null)
+			return "No conectado a ninguna pieza del tablero";
+		
+		if (MagnetSystem.Instance.magnetLocks.ContainsKey(magnet) && 
+			MagnetSystem.Instance.magnetLocks[magnet])
+			return "Bloqueado temporalmente";
+		
+		return "Razón desconocida";
+	}
+	
+	private Transform FindMagnetInHierarchy(Transform startTransform)
+	{
+		// Primero: verificar si el objeto actual es un imán
+		if (MagnetSystem.Instance != null && MagnetSystem.Instance.allMagnets.Contains(startTransform))
+		{
+			return startTransform;
+		}
+		
+		// Segundo: buscar en hijos (los imanes podrían ser hijos del objeto clickeado)
+		foreach (Transform child in startTransform)
+		{
+			if (MagnetSystem.Instance != null && MagnetSystem.Instance.allMagnets.Contains(child))
+			{
+				return child;
+			}
+		}
+		
+		// Tercero: buscar en padres
+		Transform parent = startTransform.parent;
+		int depth = 0;
+		while (parent != null && depth < 10)
+		{
+			if (MagnetSystem.Instance != null && MagnetSystem.Instance.allMagnets.Contains(parent))
+			{
+				return parent;
+			}
+			parent = parent.parent;
+			depth++;
+		}
+		
+		// Cuarto: buscar por nombre en todos los imanes
+		if (MagnetSystem.Instance != null)
+		{
+			foreach (Transform magnet in MagnetSystem.Instance.allMagnets)
+			{
+				if (magnet.name == startTransform.name || 
+					startTransform.name.Contains(magnet.name) || 
+					magnet.name.Contains(startTransform.name))
+				{
+					return magnet;
+				}
+			}
+		}
+		
+		return null;
+	}
+	
+	private bool IsMagnetAvailableForDiamante(Transform magnet)
+	{
+		if (MagnetSystem.Instance == null) return false;
+		
+		// Usar el método que acabamos de crear en MagnetSystem
+		return MagnetSystem.Instance.IsMagnetAvailableForPlacement(magnet);
+	}
 
     public void ActualizarEstadoBoton()
 	{
@@ -81,7 +271,7 @@ public class GestionBotonesCartas : MonoBehaviour
 		}
 		
 		// Si estamos en medio de una acción de carta, no actualizar
-		if (esperandoSeleccionObjetivo || cartaEnUso) 
+		if (esperandoSeleccionObjetivo || cartaEnUso || colocandoDiamante) 
 		{
 			OcultarBotonUtilizar();
 			return;
@@ -228,6 +418,9 @@ public class GestionBotonesCartas : MonoBehaviour
 		{
 			case CardType.Dinamita:
 				IniciarSeleccionObjetivoDinamita();
+				break;
+			case CardType.Diamante:
+				IniciarColocacionDiamante();
 				break;
 			default:
 				Debug.LogWarning($"⚠️ Acción no implementada para: {cartaScript.GetTipoCarta()}");
@@ -758,5 +951,310 @@ public class GestionBotonesCartas : MonoBehaviour
 		{
 			ActualizarEstadoBoton();
 		}
+	}
+	
+	// MÉTODO: Iniciar colocación del Diamante
+	private void IniciarColocacionDiamante()
+	{
+		Debug.Log("💎 Iniciando colocación de DIAMANTE");
+		
+		// Ocultar botón utilizar temporalmente
+		OcultarBotonUtilizar();
+		
+		// Activar modo colocación de diamante
+		colocandoDiamante = true;
+		
+		// Mostrar mensaje
+		MostrarMensaje("Selecciona un imán para colocar el DIAMANTE");
+		
+		// ACTIVAR el objeto Diamante (ya existe en escena)
+		if (hexagonoDiamantePrefab != null)
+		{
+			hexagonoDiamantePrefab.SetActive(true);
+			diamanteInstanciado = hexagonoDiamantePrefab; // Referencia al objeto activado
+			
+			// Configurar el diamante para colocación
+			HexagonPiece hexPiece = diamanteInstanciado.GetComponent<HexagonPiece>();
+			if (hexPiece != null)
+			{
+				hexPiece.SetCollidersEnabled(true);
+				hexPiece.isConnected = false; // Asegurar que no está conectado
+			}
+			
+			Debug.Log("💎 Hexágono Diamante activado");
+		}
+		else
+		{
+			Debug.LogError("❌ No hay objeto Diamante asignado");
+			CancelarColocacionDiamante();
+			return;
+		}
+		
+		// Activar imanes disponibles (verde)
+		if (MagnetSystem.Instance != null)
+		{
+			MagnetSystem.Instance.ActivarImanesParaColocacion();
+			Debug.Log("🧲 Imanes activados para colocación");
+		}
+		else
+		{
+			Debug.LogError("❌ No se encontró MagnetSystem.Instance");
+			CancelarColocacionDiamante();
+		}
+		
+		Debug.Log("🎯 Modo colocación activado - Selecciona un imán para el Diamante");
+	}
+
+	// MÉTODO: Manejar clic en imanes durante colocación de Diamante
+	public void ProcesarClicEnIman(Transform imanSeleccionado)
+	{
+		if (!colocandoDiamante || diamanteInstanciado == null) return;
+		
+		Debug.Log($"💎 Iman seleccionado: {imanSeleccionado.name}");
+		
+		// Colocar el diamante en el imán seleccionado
+		ColocarDiamanteEnIman(imanSeleccionado);
+	}
+
+	// MÉTODO: Colocar diamante en el imán seleccionado
+	private void ColocarDiamanteEnIman(Transform imanSeleccionado)
+	{
+		if (diamanteInstanciado == null || imanSeleccionado == null) 
+		{
+			Debug.LogError("❌ No se puede colocar Diamante - Referencias nulas");
+			CancelarColocacionDiamante();
+			return;
+		}
+		
+		Debug.Log($"💎 Colocando Diamante en imán: {imanSeleccionado.name}");
+		
+		try
+		{
+			// Obtener información del imán
+			string cleanMagnetName = imanSeleccionado.name.Split(' ')[0];
+			HexagonPiece hexagonDiamante = diamanteInstanciado.GetComponent<HexagonPiece>();
+			
+			if (hexagonDiamante == null)
+			{
+				Debug.LogError("❌ El Diamante no tiene componente HexagonPiece");
+				CancelarColocacionDiamante();
+				return;
+			}
+			
+			if (hexagonDiamante.magnetConnections.ContainsKey(cleanMagnetName))
+			{
+				string diamanteMagnetName = hexagonDiamante.magnetConnections[cleanMagnetName];
+				Transform diamanteMagnet = diamanteInstanciado.transform.Find(diamanteMagnetName);
+				
+				if (diamanteMagnet != null)
+				{
+					// Calcular posición para conectar
+					Vector3 connectionOffset = diamanteMagnet.position - diamanteInstanciado.transform.position;
+					Vector3 targetPosition = imanSeleccionado.position - connectionOffset;
+					
+					// Mover diamante a la posición con animación
+					StartCoroutine(MoverDiamanteAConexion(targetPosition, hexagonDiamante, diamanteMagnet, imanSeleccionado));
+				}
+				else
+				{
+					Debug.LogError($"❌ No se encontró el imán del Diamante: {diamanteMagnetName}");
+					CancelarColocacionDiamante();
+				}
+			}
+			else
+			{
+				Debug.LogError($"❌ No se puede conectar el Diamante al imán {cleanMagnetName}");
+				CancelarColocacionDiamante();
+			}
+		}
+		catch (System.Exception e)
+		{
+			Debug.LogError($"❌ Error al colocar Diamante: {e.Message}");
+			CancelarColocacionDiamante();
+		}
+	}
+	
+	private IEnumerator MoverDiamanteAConexion(Vector3 targetPosition, HexagonPiece hexagonDiamante, Transform diamanteMagnet, Transform imanSeleccionado)
+	{
+		Debug.Log("💎 Animando colocación del Diamante...");
+		
+		// Posición inicial (levantar un poco)
+		Vector3 startPosition = diamanteInstanciado.transform.position;
+		Vector3 raisedPosition = startPosition + Vector3.up * 0.5f;
+		
+		// Animación en tres fases: subir, mover, bajar
+		float duracion = 0.5f;
+		
+		// Fase 1: Subir
+		LeanTween.move(diamanteInstanciado, raisedPosition, duracion * 0.3f)
+			.setEase(LeanTweenType.easeOutQuad);
+		yield return new WaitForSeconds(duracion * 0.3f);
+		
+		// Fase 2: Mover horizontalmente
+		Vector3 horizontalTarget = new Vector3(targetPosition.x, raisedPosition.y, targetPosition.z);
+		LeanTween.move(diamanteInstanciado, horizontalTarget, duracion * 0.4f)
+			.setEase(LeanTweenType.easeInOutQuad);
+		yield return new WaitForSeconds(duracion * 0.4f);
+		
+		// Fase 3: Bajar
+		LeanTween.move(diamanteInstanciado, targetPosition, duracion * 0.3f)
+			.setEase(LeanTweenType.easeInQuad);
+		yield return new WaitForSeconds(duracion * 0.3f);
+		
+		// Conectar al tablero
+		HexagonPiece targetPiece = MagnetSystem.Instance.GetPieceForMagnet(imanSeleccionado);
+		if (targetPiece != null)
+		{
+			hexagonDiamante.RegisterConnection(targetPiece);
+			MagnetSystem.Instance.ProcessNewConnection(hexagonDiamante, diamanteMagnet);
+			hexagonDiamante.isConnected = true;
+			hexagonDiamante.isFlipped = true; // Marcar como volteado
+			
+			Debug.Log($"💎 Diamante conectado a {targetPiece.name}");
+			
+			// Forzar actualización física
+			hexagonDiamante.ForcePhysicalConnectionCheck();
+			targetPiece.ForcePhysicalConnectionCheck();
+			
+			// Finalizar colocación exitosa
+			FinalizarColocacionDiamante();
+		}
+		else
+		{
+			Debug.LogError("❌ No se pudo obtener la pieza objetivo para la conexión");
+			CancelarColocacionDiamante();
+		}
+	}
+
+	// MÉTODO: Finalizar colocación exitosa
+	private void FinalizarColocacionDiamante()
+	{
+		Debug.Log("💎 Colocación de Diamante completada");
+		
+		// Ocultar mensaje
+		OcultarMensaje();
+		
+		// Desactivar imanes
+		if (MagnetSystem.Instance != null)
+		{
+			MagnetSystem.Instance.DesactivarImanesColocacion();
+			Debug.Log("🧲 Imanes desactivados");
+		}
+		
+		// Mover carta al descarte
+		if (cartaSeleccionada != null && manoJugadorActual != null)
+		{
+			if (MazoDescarte.Instance != null)
+			{
+				// Deseleccionar antes de mover
+				Carta3D cartaScript = cartaSeleccionada.GetComponent<Carta3D>();
+				if (cartaScript != null)
+				{
+					cartaScript.Deseleccionar();
+				}
+				
+				MazoDescarte.Instance.AgregarCartaDescarte(cartaSeleccionada);
+				manoJugadorActual.RemoverCarta(cartaSeleccionada);
+				Debug.Log("✅ Diamante utilizado y movido al descarte");
+			}
+		}
+
+		// Deseleccionar todas las cartas
+		if (manoJugadorActual != null)
+		{
+			manoJugadorActual.DeseleccionarTodasLasCartas();
+		}
+
+		// Resetear estado
+		colocandoDiamante = false;
+		diamanteInstanciado = null;
+		
+		// ✅ REACTIVAR BOTÓN DE TIRAR DADO (si todavía es nuestro turno)
+		bool esTurnoJugador = GameManager.Instance != null && 
+							  GameManager.Instance.currentPlayerIndex == 0 &&
+							  GameManager.Instance.currentPhase == GamePhase.TotemMovement;
+		
+		if (esTurnoJugador && UIManager.Instance != null)
+		{
+			UIManager.Instance.SetDiceButtonVisibility(true);
+		}
+
+		// Terminar el turno
+		cartaEnUso = false;
+		TerminarTurnoDespuesDeUsarCarta();
+	}
+
+	// MÉTODO: Cancelar colocación
+	private void CancelarColocacionDiamante()
+	{
+		Debug.Log("❌ Colocación de Diamante cancelada");
+		
+		// Ocultar mensaje
+		OcultarMensaje();
+		
+		// Desactivar imanes
+		if (MagnetSystem.Instance != null)
+		{
+			MagnetSystem.Instance.DesactivarImanesColocacion();
+			Debug.Log("🧲 Imanes desactivados");
+		}
+		
+		// DESACTIVAR el objeto Diamante (no destruirlo)
+		if (diamanteInstanciado != null)
+		{
+			diamanteInstanciado.SetActive(false);
+			
+			// Resetear componente HexagonPiece
+			HexagonPiece hexPiece = diamanteInstanciado.GetComponent<HexagonPiece>();
+			if (hexPiece != null)
+			{
+				hexPiece.isConnected = false;
+				hexPiece.SetCollidersEnabled(false);
+			}
+		}
+		
+		// Resetear estado
+		colocandoDiamante = false;
+		cartaEnUso = false;
+		
+		// ✅ REACTIVAR BOTÓN DE TIRAR DADO AL CANCELAR
+		bool esTurnoJugador = GameManager.Instance != null && 
+							  GameManager.Instance.currentPlayerIndex == 0 &&
+							  GameManager.Instance.currentPhase == GamePhase.TotemMovement;
+		
+		if (esTurnoJugador && UIManager.Instance != null)
+		{
+			UIManager.Instance.SetDiceButtonVisibility(true);
+		}
+		
+		// Volver a mostrar botón utilizar
+		ActualizarEstadoBoton();
+		
+		Debug.Log("💎 Estado de Diamante resetado");
+	}
+	
+	// NUEVO: Método para debug del estado actual de colocación
+	[ContextMenu("Debug Estado Colocación Diamante")]
+	public void DebugEstadoColocacionDiamante()
+	{
+		Debug.Log("=== 💎 DEBUG COLOCACIÓN DIAMANTE ===");
+		Debug.Log($"- Colocando diamante: {colocandoDiamante}");
+		Debug.Log($"- Diamante instanciado: {diamanteInstanciado != null}");
+		Debug.Log($"- Carta en uso: {cartaEnUso}");
+		
+		if (MagnetSystem.Instance != null)
+		{
+			int disponibles = MagnetSystem.Instance.allMagnets.Count(m => IsMagnetAvailableForDiamante(m));
+			Debug.Log($"- Imanes disponibles: {disponibles}/{MagnetSystem.Instance.allMagnets.Count}");
+			
+			// Ejecutar debug completo del sistema de imanes
+			MagnetSystem.Instance.DebugEstadoCompletoImanes();
+		}
+		else
+		{
+			Debug.Log("❌ MagnetSystem.Instance es null");
+		}
+		
+		Debug.Log("=====================================");
 	}
 }

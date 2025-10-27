@@ -19,5 +19,6 @@ public enum CardType
 {
     Oro,
     Piedra,
-	Dinamita
+	Dinamita,
+	Diamante
 }

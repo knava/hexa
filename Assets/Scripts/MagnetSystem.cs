@@ -18,7 +18,7 @@ public class MagnetSystem : MonoBehaviour
     public LayerMask raycastObstacleLayer;
     
     public List<Transform> allMagnets = new List<Transform>();
-    private Dictionary<Transform, bool> magnetAvailability = new Dictionary<Transform, bool>();
+    public Dictionary<Transform, bool> magnetAvailability = new Dictionary<Transform, bool>();
     private Dictionary<Transform, HexagonPiece> magnetToPieceMap = new Dictionary<Transform, HexagonPiece>();
     
     private Dictionary<string, List<string>> adjacentMagnets = new Dictionary<string, List<string>>()
@@ -36,7 +36,7 @@ public class MagnetSystem : MonoBehaviour
     private bool isConnectingInProgress = false;
     private bool isRaycastOccupation = false;
     private Dictionary<string, List<string>> availableMagnetsRegistry = new Dictionary<string, List<string>>();
-    private Dictionary<Transform, bool> magnetLocks = new Dictionary<Transform, bool>();
+    public Dictionary<Transform, bool> magnetLocks = new Dictionary<Transform, bool>();
 
     void Awake()
     {
@@ -238,13 +238,13 @@ public class MagnetSystem : MonoBehaviour
     }
 
     private void SetMagnetColor(Transform magnet, Color color)
-    {
-        Renderer renderer = magnet.GetComponent<Renderer>();
-        if (renderer != null)
-        {
-            renderer.material.color = color;
-        }
-    }
+	{
+		Renderer renderer = magnet.GetComponent<Renderer>();
+		if (renderer != null)
+		{
+			renderer.material.color = color;
+		}
+	}
 
     #if UNITY_EDITOR
     public void LogAvailableMagnetsRegistry()
@@ -459,4 +459,194 @@ public class MagnetSystem : MonoBehaviour
             }
         }
     }
+	
+	// MÉTODOS PARA DIAMANTE - Agregar al MagnetSystem.cs
+	public void ActivarImanesParaColocacion()
+	{
+		Debug.Log("🧲 Activando imanes para colocación de Diamante");
+		
+		int imanesActivados = 0;
+		
+		foreach (Transform magnet in allMagnets)
+		{
+			if (IsMagnetAvailableForPlacement(magnet))
+			{
+				// Activar visualmente el imán (color verde)
+				SetMagnetColor(magnet, Color.green);
+				SetMagnetVisibility(magnet, true);
+				
+				// ✅ FORZAR que el collider esté habilitado y sea clickable
+				Collider col = magnet.GetComponent<Collider>();
+				if (col == null)
+				{
+					// Si no tiene collider, agregar uno
+					col = magnet.gameObject.AddComponent<BoxCollider>();
+					Debug.Log($"⚠️ Se agregó collider a {magnet.name}");
+				}
+				
+				col.enabled = true;
+				col.isTrigger = true; // Importante para raycasts
+				
+				// ✅ CAMBIAR LA CAPA a una capa que tenga prioridad
+				magnet.gameObject.layer = LayerMask.NameToLayer("Default");
+				
+				// Asegurar que el GameObject esté activo
+				magnet.gameObject.SetActive(true);
+
+				// Debug
+				HexagonPiece piece = GetPieceForMagnet(magnet);
+				string pieceName = piece != null ? piece.gameObject.name : "SIN PIEZA";
+				
+				Debug.Log($"🧲 Iman activado: {magnet.name} - Pieza: {pieceName} - Capa: {magnet.gameObject.layer}");
+				
+				imanesActivados++;
+			}
+			else
+			{
+				// Asegurar que los imanes no disponibles estén desactivados
+				SetMagnetVisibility(magnet, false);
+				Collider col = magnet.GetComponent<Collider>();
+				if (col != null)
+				{
+					col.enabled = false;
+				}
+			}
+		}
+		
+		Debug.Log($"🧲 Resumen: {imanesActivados}/{allMagnets.Count} imanes activados para colocación");
+	}
+	
+	private string GetRazonNoDisponible(Transform magnet)
+	{
+		List<string> razones = new List<string>();
+		
+		if (!magnetAvailability.ContainsKey(magnet))
+			razones.Add("No en diccionario");
+		else if (!magnetAvailability[magnet])
+			razones.Add("No disponible en magnetAvailability");
+		
+		if (CheckPhysicalOccupation(magnet))
+			razones.Add("Ocupado físicamente");
+		
+		HexagonPiece connectedPiece = GetPieceForMagnet(magnet);
+		if (connectedPiece == null)
+			razones.Add("Sin pieza conectada");
+		else if (!connectedPiece.isFlipped) // ✅ NUEVA RAZÓN
+			razones.Add("Pieza no volteada");
+		
+		if (magnetLocks.ContainsKey(magnet) && magnetLocks[magnet])
+			razones.Add("Bloqueado por IA");
+		
+		return razones.Count > 0 ? string.Join(", ", razones) : "Razón desconocida";
+	}
+
+	public void DesactivarImanesColocacion()
+	{
+		Debug.Log("🧲 Desactivando imanes después de colocación");
+		
+		foreach (Transform magnet in allMagnets)
+		{
+			// Restaurar color original y deshabilitar interacción
+			SetMagnetColor(magnet, Color.white);
+			SetMagnetVisibility(magnet, false);
+			
+			Collider col = magnet.GetComponent<Collider>();
+			if (col != null)
+			{
+				col.enabled = false;
+			}
+		}
+	}
+
+	public bool IsMagnetAvailableForPlacement(Transform magnet)
+	{
+		// Un imán está disponible para colocación si:
+		// 1. Está disponible en el diccionario
+		// 2. No está físicamente ocupado
+		// 3. Está conectado a una pieza del tablero existente
+		// 4. La pieza conectada está VOLTEADA (isFlipped = true)
+		// 5. No está bloqueado
+		
+		if (!magnetAvailability.ContainsKey(magnet) || !magnetAvailability[magnet])
+			return false;
+			
+		if (CheckPhysicalOccupation(magnet))
+			return false;
+			
+		HexagonPiece connectedPiece = GetPieceForMagnet(magnet);
+		if (connectedPiece == null)
+			return false;
+			
+		// ✅ CORRECCIÓN CRÍTICA: La pieza debe estar VOLTEADA para poder conectarle nuevas piezas
+		if (!connectedPiece.isFlipped)
+		{
+			Debug.Log($"❌ Iman {magnet.name} no disponible - Pieza {connectedPiece.name} NO está volteada");
+			return false;
+		}
+			
+		// Verificar que no esté bloqueado por IA
+		if (magnetLocks.ContainsKey(magnet) && magnetLocks[magnet])
+			return false;
+			
+		return true;
+	}
+	
+	/// <summary>
+	/// Verifica si un imán está ocupado
+	/// </summary>
+	public bool IsMagnetOccupied(Transform magnet)
+	{
+		if (!magnetAvailability.ContainsKey(magnet))
+			return true;
+
+		// Un imán está ocupado si no está disponible O está físicamente ocupado
+		return !magnetAvailability[magnet] || CheckPhysicalOccupation(magnet);
+	}
+	
+	// NUEVO: Método para debug completo del estado de los imanes
+	[ContextMenu("Debug Estado Imanes")]
+	public void DebugEstadoCompletoImanes()
+	{
+		Debug.Log("=== 🔍 DEBUG COMPLETO DE IMANES ===");
+		
+		foreach (Transform magnet in allMagnets)
+		{
+			HexagonPiece piece = GetPieceForMagnet(magnet);
+			string pieceName = piece != null ? piece.gameObject.name : "SIN PIEZA";
+			string pieceConnected = piece != null ? piece.isConnected.ToString() : "N/A";
+			string pieceFlipped = piece != null ? piece.isFlipped.ToString() : "N/A";
+			
+			bool disponible = IsMagnetAvailableForPlacement(magnet);
+			bool ocupadoFisico = CheckPhysicalOccupation(magnet);
+			bool bloqueado = magnetLocks.ContainsKey(magnet) && magnetLocks[magnet];
+			
+			string estado = disponible ? "✅ DISPONIBLE" : "❌ NO DISPONIBLE";
+			
+			Debug.Log($"🧲 {magnet.name}: {estado}");
+			Debug.Log($"   - Pieza: {pieceName} (Conectada: {pieceConnected}, Volteada: {pieceFlipped})");
+			Debug.Log($"   - Ocupado físico: {ocupadoFisico}");
+			Debug.Log($"   - Bloqueado: {bloqueado}");
+			Debug.Log($"   - En diccionario: {magnetAvailability.ContainsKey(magnet)}");
+			if (magnetAvailability.ContainsKey(magnet))
+				Debug.Log($"   - Disponible en diccionario: {magnetAvailability[magnet]}");
+		}
+		
+		Debug.Log("=====================================");
+	}
+	
+	public void ForzarVolteadoParaColocacion()
+	{
+		Debug.Log("🔄 Forzando estado de volteado para colocación...");
+		
+		foreach (Transform magnet in allMagnets)
+		{
+			HexagonPiece piece = GetPieceForMagnet(magnet);
+			if (piece != null && !piece.isFlipped)
+			{
+				// Forzar el estado de volteado para permitir colocación
+				piece.isFlipped = true;
+				Debug.Log($"✅ Pieza forzada a volteada: {piece.name}");
+			}
+		}
+	}
 }

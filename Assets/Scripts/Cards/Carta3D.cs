@@ -277,8 +277,10 @@ public class Carta3D : MonoBehaviour
             return CardType.Piedra;
         else if (frenteMaterial == MazoFisico.Instance.frenteDinamita)
             return CardType.Dinamita;
-        else
-            return CardType.Piedra; // Tipo por defecto
+		else if (frenteMaterial == MazoFisico.Instance.frenteDiamante)
+			return CardType.Diamante;
+			else
+			return CardType.Piedra;
     }
     
     /// <summary>
@@ -286,7 +288,7 @@ public class Carta3D : MonoBehaviour
     /// </summary>
     public bool EsCartaDeAccion()
     {
-        return GetTipoCarta() == CardType.Dinamita;
+        return GetTipoCarta() == CardType.Dinamita || GetTipoCarta() == CardType.Diamante;
     }
     
     /// <summary>

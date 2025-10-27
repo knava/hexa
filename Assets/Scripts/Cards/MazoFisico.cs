@@ -12,7 +12,13 @@ public class MazoFisico : MonoBehaviour
     public Material frenteOro;
     public Material frenteOpalo;
     public Material frenteDinamita;
-    public int cartasEnMazo = 10;
+	public Material frenteDiamante;
+	
+	[Header("Cantidad Exacta de Cartas por Tipo")]
+	public int cantidadOro = 4;
+	public int cantidadPiedra = 4;
+	public int cantidadDinamita = 1;
+	public int cantidadDiamante = 1;
     
     [Header("Posición en Mano")]
     public Transform centroMano;
@@ -55,7 +61,7 @@ public class MazoFisico : MonoBehaviour
         // Cuando se habilita el mazo, generar cartas si no existen
         if (cartasMazo.Count == 0)
         {
-            GenerarMazo50_50();
+            GenerarMazoConfigurable();
         }
         else
         {
@@ -70,58 +76,113 @@ public class MazoFisico : MonoBehaviour
         mazoHabilitado = false;
         cartaYaRobada = false;
     }
-
+	
     /// <summary>
-    /// Genera el mazo con distribución 40% Oro, 40% Piedra, 20% Dinamita
-    /// </summary>
-    private void GenerarMazo50_50()
-    {
-        cartasMazo.Clear();
-        
-        List<Material> materialesCartas = new List<Material>();
-        
-        // Crear distribución de cartas según porcentajes
-        for (int i = 0; i < cartasEnMazo; i++)
-        {
-            // Determinar el tipo de carta según porcentajes
-            float probabilidad = Random.Range(0f, 100f);
-            Material materialFrente;
-            
-            if (probabilidad < 40f)
-            {
-                materialFrente = frenteOro;        // 40% Oro
-            }
-            else if (probabilidad < 80f)
-            {
-                materialFrente = frenteOpalo;      // 40% Piedra
-            }
-            else
-            {
-                materialFrente = frenteDinamita;   // 20% Dinamita
-            }
-            
-            materialesCartas.Add(materialFrente);
-        }
+	/// Genera el mazo con cantidades exactas configuradas desde el Inspector
+	/// </summary>
+	private void GenerarMazoConfigurable()
+	{
+		// Validar configuración primero
+		if (!ValidarConfiguracionMazo())
+		{
+			Debug.LogError("❌ No se puede generar el mazo - Configuración inválida");
+			return;
+		}
+		
+		cartasMazo.Clear();
+		
+		List<Material> materialesCartas = new List<Material>();
+		
+		// Agregar cartas según las cantidades configuradas
+		AgregarCartasPorTipo(materialesCartas, frenteOro, cantidadOro, "Oro");
+		AgregarCartasPorTipo(materialesCartas, frenteOpalo, cantidadPiedra, "Piedra");
+		AgregarCartasPorTipo(materialesCartas, frenteDinamita, cantidadDinamita, "Dinamita");
+		AgregarCartasPorTipo(materialesCartas, frenteDiamante, cantidadDiamante, "Diamante");
+		
+		// Calcular total de cartas
+		int totalCartas = cantidadOro + cantidadPiedra + cantidadDinamita + cantidadDiamante;
+		
+		Debug.Log($"🃏 Generando mazo configurado - Total: {totalCartas} cartas");
 
-        // Barajar las cartas
-        materialesCartas = BarajarLista(materialesCartas);
+		// Barajar las cartas
+		materialesCartas = BarajarLista(materialesCartas);
 
-        // Instanciar cartas
-        for (int i = 0; i < cartasEnMazo; i++)
-        {
-            Vector3 posicion = transform.position + new Vector3(i * 0.001f, 0, 0);
-            GameObject carta = Instantiate(cartaPrefab, posicion, Quaternion.identity, transform);
-            carta.transform.rotation = Quaternion.Euler(90, 0, 0);
-            
-            Carta3D cartaScript = carta.GetComponent<Carta3D>();
-            cartaScript.SetFrenteMaterial(materialesCartas[i]);
-            cartaScript.MostrarDorso();
-            cartaScript.SetMazoPadre(this);
-            cartaScript.SetPuedeGirar(false);
-            
-            cartasMazo.Add(carta);
-        }
-    }
+		// Instanciar cartas
+		for (int i = 0; i < totalCartas; i++)
+		{
+			Vector3 posicion = transform.position + new Vector3(i * 0.001f, 0, 0);
+			GameObject carta = Instantiate(cartaPrefab, posicion, Quaternion.identity, transform);
+			carta.transform.rotation = Quaternion.Euler(90, 0, 0);
+			
+			Carta3D cartaScript = carta.GetComponent<Carta3D>();
+			cartaScript.SetFrenteMaterial(materialesCartas[i]);
+			cartaScript.MostrarDorso();
+			cartaScript.SetMazoPadre(this);
+			cartaScript.SetPuedeGirar(false);
+			
+			cartasMazo.Add(carta);
+		}
+		
+		Debug.Log($"✅ Mazo generado con {totalCartas} cartas exactas");
+	}
+
+	/// <summary>
+	/// Método auxiliar para agregar cartas de un tipo específico
+	/// </summary>
+	private void AgregarCartasPorTipo(List<Material> materiales, Material material, int cantidad, string tipoNombre)
+	{
+		for (int i = 0; i < cantidad; i++)
+		{
+			materiales.Add(material);
+		}
+		Debug.Log($"   - {tipoNombre}: {cantidad} cartas");
+	}
+	
+	/// <summary>
+	/// Valida que la configuración del mazo sea correcta
+	/// </summary>
+	private bool ValidarConfiguracionMazo()
+	{
+		bool configuracionValida = true;
+		
+		if (cantidadOro < 0)
+		{
+			Debug.LogError("❌ Cantidad de Oro no puede ser negativa");
+			configuracionValida = false;
+		}
+		
+		if (cantidadPiedra < 0)
+		{
+			Debug.LogError("❌ Cantidad de Piedra no puede ser negativa");
+			configuracionValida = false;
+		}
+		
+		if (cantidadDinamita < 0)
+		{
+			Debug.LogError("❌ Cantidad de Dinamita no puede ser negativa");
+			configuracionValida = false;
+		}
+		
+		if (cantidadDiamante < 0)
+		{
+			Debug.LogError("❌ Cantidad de Diamante no puede ser negativa");
+			configuracionValida = false;
+		}
+		
+		int total = cantidadOro + cantidadPiedra + cantidadDinamita + cantidadDiamante;
+		if (total <= 0)
+		{
+			Debug.LogError("❌ El mazo debe tener al menos una carta");
+			configuracionValida = false;
+		}
+		
+		if (total > 50) // Límite razonable
+		{
+			Debug.LogWarning("⚠️ El mazo tiene muchas cartas (" + total + "), puede afectar el rendimiento");
+		}
+		
+		return configuracionValida;
+	}
 
     /// <summary>
     /// Reactiva todas las cartas del mazo
