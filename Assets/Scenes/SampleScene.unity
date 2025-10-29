@@ -2765,7 +2765,7 @@ MonoBehaviour:
   prefabEntradaJugador: {fileID: 2093666076994504763, guid: 709c6206fbc81f44e889469d0f603744, type: 3}
   textoTituloRanking: {fileID: 1681450886}
   botonSalir: {fileID: 1345846611}
-  textoRanking: RANKING FINAL
+  textoRanking: RANKING FINAL!
   tiempoMostrarBoton: 5
 --- !u!1 &1230389876
 GameObject:

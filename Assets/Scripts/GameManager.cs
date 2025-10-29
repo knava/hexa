@@ -54,13 +54,16 @@ public class GameManager : MonoBehaviour
     [Header("Control de Acciones por Turno")]
     public bool dadoTiradoEnEsteTurno = false;
 	
-	[Header("Sistema Diamante")]
-	public int puntosDiamante = 20;
+	[Header("Sistema de Puntuación")]
+	public Dictionary<int, int> puntosAdicionalesPorJugador = new Dictionary<int, int>();
+	public int puntosDiamante = 10; // Cambiado a 10 puntos como solicitas
 
     // Variables privadas para gestión interna
     public Dictionary<string, HexagonPiece> unflippedHexagons = new Dictionary<string, HexagonPiece>();
     public GamePhase currentPhase;
     private bool isConstructionTurnActive = false;
+	
+	
 
     void Awake()
     {
@@ -952,4 +955,16 @@ public class GameManager : MonoBehaviour
             }
         }
     }
+	
+	public void SumarPuntosPorDiamante(int playerID)
+	{
+		if (!puntosAdicionalesPorJugador.ContainsKey(playerID))
+		{
+			puntosAdicionalesPorJugador[playerID] = 0;
+		}
+		
+		puntosAdicionalesPorJugador[playerID] += puntosDiamante;
+		
+		Debug.Log($"💎 Jugador {playerID} recibe {puntosDiamante} puntos por Diamante. Total adicional: {puntosAdicionalesPorJugador[playerID]}");
+	}
 }

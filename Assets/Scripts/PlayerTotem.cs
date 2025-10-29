@@ -151,6 +151,12 @@ public class PlayerTotem : MonoBehaviour
 		
 		if (destination.isDiamondPiece)
 		{
+			// Sumar puntos adicionales al jugador
+			if (GameManager.Instance != null)
+			{
+				GameManager.Instance.SumarPuntosPorDiamante(this.playerID);
+			}
+			
 			GameManager.Instance.FinDelJuego();
 			yield break; // detenemos la coroutine para evitar seguir ejecutando acciones
 		}

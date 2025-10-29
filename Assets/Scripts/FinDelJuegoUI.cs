@@ -121,28 +121,29 @@ public class FinDelJuegoUI : MonoBehaviour
     }
 
     private int CalcularPuntuacionJugador(int playerID)
-    {
-        int puntuacion = 0;
-        
-        if (MazoFisico.Instance != null && 
-            MazoFisico.Instance.manosJugadores.TryGetValue(playerID, out ManoJugador mano))
-        {
-            foreach (GameObject cartaObj in mano.GetCartas())
-            {
-                Carta3D carta3D = cartaObj.GetComponent<Carta3D>();
-                if (carta3D != null)
-                {
-                    Material frenteMaterial = carta3D.GetFrenteMaterial();
-                    if (frenteMaterial == MazoFisico.Instance.frenteOro)
-                    {
-                        puntuacion += 1;
-                    }
-                }
-            }
-        }
-        
-        return puntuacion;
-    }
+	{
+		int puntuacion = 0;
+		
+		// Puntos por cartas de oro
+		if (MazoFisico.Instance != null && 
+			MazoFisico.Instance.manosJugadores.TryGetValue(playerID, out ManoJugador mano))
+		{
+			foreach (GameObject cartaObj in mano.GetCartas())
+			{
+				Carta3D carta3D = cartaObj.GetComponent<Carta3D>();
+				if (carta3D != null)
+				{
+					Material frenteMaterial = carta3D.GetFrenteMaterial();
+					if (frenteMaterial == MazoFisico.Instance.frenteOro)
+					{
+						puntuacion += 1;
+					}
+				}
+			}
+		}
+
+		return puntuacion;
+	}
 
     private void CrearEntradaRanking(JugadorPuntuacion jugador, int posicion)
     {

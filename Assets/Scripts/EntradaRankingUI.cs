@@ -10,11 +10,11 @@ public class EntradaRankingUI : MonoBehaviour
     public TextMeshProUGUI textoPuntuacion;
     public Image iconoJugador;
     
-    [Header("Colores")]
+    /*[Header("Colores")]
     public Color colorPrimerLugar = new Color(1f, 0.8f, 0f); // Dorado
     public Color colorSegundoLugar = new Color(0.7f, 0.7f, 0.7f); // Plata
     public Color colorTercerLugar = new Color(0.8f, 0.5f, 0.2f); // Bronce
-    public Color colorResto = new Color(0.2f, 0.2f, 0.3f); // Azul oscuro
+    public Color colorResto = new Color(0.2f, 0.2f, 0.3f); // Azul oscuro*/
     
     private Image fondoPanel;
 
@@ -42,10 +42,10 @@ public class EntradaRankingUI : MonoBehaviour
         }
         
         // Configurar color de fondo según posición
-        if (fondoPanel != null)
+        /*if (fondoPanel != null)
         {
             fondoPanel.color = GetColorPorPosicion(posicion);
-        }
+        }*/
     }
     
     private string GetTextoPosicion(int posicion)
@@ -59,7 +59,7 @@ public class EntradaRankingUI : MonoBehaviour
         }
     }
     
-    private Color GetColorPorPosicion(int posicion)
+    /*private Color GetColorPorPosicion(int posicion)
     {
         switch (posicion)
         {
@@ -68,5 +68,5 @@ public class EntradaRankingUI : MonoBehaviour
             case 3: return colorTercerLugar;
             default: return colorResto;
         }
-    }
+    }*/
 }
