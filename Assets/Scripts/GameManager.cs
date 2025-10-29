@@ -53,6 +53,9 @@ public class GameManager : MonoBehaviour
     
     [Header("Control de Acciones por Turno")]
     public bool dadoTiradoEnEsteTurno = false;
+	
+	[Header("Sistema Diamante")]
+	public int puntosDiamante = 20;
 
     // Variables privadas para gestión interna
     public Dictionary<string, HexagonPiece> unflippedHexagons = new Dictionary<string, HexagonPiece>();

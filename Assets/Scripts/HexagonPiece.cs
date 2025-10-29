@@ -8,6 +8,7 @@ public class HexagonPiece : MonoBehaviour
     [Header("Configuración Especial")]
     public bool isMainPiece = false;
     public bool isStealCardPiece = false;
+	public bool isDiamondPiece = false;
     
     [Header("Configuración de Materiales")]
     public int targetMaterialIndex = 2;

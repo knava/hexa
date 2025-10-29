@@ -1929,6 +1929,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::HexagonPiece
   isMainPiece: 0
   isStealCardPiece: 0
+  isDiamondPiece: 1
   targetMaterialIndex: 2
   highlightMaterial: {fileID: 0}
   coloredRenderers: []
@@ -2161,7 +2162,10 @@ MonoBehaviour:
   frenteOpalo: {fileID: 2100000, guid: 1b76d1cc1c7b2fe48bee3c04fbbbddbf, type: 2}
   frenteDinamita: {fileID: 2100000, guid: 635f78818ed1cc448898fa90ffc817bd, type: 2}
   frenteDiamante: {fileID: 2100000, guid: 75aaabc70b0af624888fb7dd8c8362ff, type: 2}
-  cartasEnMazo: 20
+  cantidadOro: 4
+  cantidadPiedra: 4
+  cantidadDinamita: 1
+  cantidadDiamante: 1
   centroMano: {fileID: 1581156354}
   radioAbanico: 5
   anguloAbanico: 45
@@ -4613,6 +4617,7 @@ MonoBehaviour:
   nombreEscenaMenu: Menu
   juegoTerminado: 0
   dadoTiradoEnEsteTurno: 0
+  puntosDiamante: 20
   currentPhase: 0
 --- !u!4 &1863614418
 Transform:

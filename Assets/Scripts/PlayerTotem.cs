@@ -149,6 +149,12 @@ public class PlayerTotem : MonoBehaviour
 			currentHexagon = hex;
 		}
 		
+		if (destination.isDiamondPiece)
+		{
+			GameManager.Instance.FinDelJuego();
+			yield break; // detenemos la coroutine para evitar seguir ejecutando acciones
+		}
+		
 		// 2. PRIMERO: Verificar si hay totems para comer
 		if (!destination.isMainPiece)
 		{
