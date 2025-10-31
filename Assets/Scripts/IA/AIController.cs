@@ -31,6 +31,12 @@ public class AIController : MonoBehaviour
 		
 		isMyTurn = true;
 		
+		// Evaluar uso de cartas de acción al inicio (INCLUYE DIAMANTE)
+		EvaluarUsoCartasAccion();
+		
+		// Si usó carta de acción, terminar turno (ya se maneja en las corrutinas)
+		if (!isMyTurn) return;
+		
 		// Pequeño delay para simular pensamiento y para que el jugador vea qué pasa
 		StartCoroutine(DelayedAITurn());
 	}
@@ -326,6 +332,17 @@ public class AIController : MonoBehaviour
 			return null;
 		}
 
+		// 🔥 PRIORIDAD MÁXIMA: Buscar hexágonos DIAMANTE (termina el juego inmediatamente)
+		List<HexagonPiece> hexagonsDiamante = selectableHexagons
+			.Where(hex => hex.isDiamondPiece)
+			.ToList();
+
+		if (hexagonsDiamante.Count > 0)
+		{
+			Debug.Log($"💎 IA: PRIORIDAD MÁXIMA - ¡DIAMANTE ENCONTRADO! Moviéndose para terminar el juego");
+			return hexagonsDiamante[0]; // Devuelve el primero que encuentre
+		}
+
 		// PRIORIDAD 1: Buscar hexágonos con ENEMIGO + CASILLA DE ROBAR CARTA
 		List<HexagonPiece> hexagonsWithEnemyAndStealCard = selectableHexagons
 			.Where(hex => !hex.isMainPiece && HasEnemyTotem(hex) && hex.isStealCardPiece)
@@ -514,20 +531,31 @@ public class AIController : MonoBehaviour
     /// Evalúa si usar cartas de acción al inicio del turno
     /// </summary>
     public void EvaluarUsoCartasAccion()
-    {
-        if (!isMyTurn) return;
-        
-        GameObject cartaDinamita = BuscarCartaDinamitaEnMano();
-        if (cartaDinamita == null) return;
-        
-        int objetivoID = BuscarObjetivoParaDinamita();
-        if (objetivoID != -1)
-        {
-            // Cambiar estado inmediatamente para evitar doble ejecución
-            isMyTurn = false;
-            StartCoroutine(UsarDinamitaContraObjetivo(cartaDinamita, objetivoID));
-        }
-    }
+	{
+		if (!isMyTurn) return;
+		
+		// PRIORIDAD 1: Usar Diamante si está disponible
+		GameObject cartaDiamante = BuscarCartaDiamanteEnMano();
+		if (cartaDiamante != null)
+		{
+			// Cambiar estado inmediatamente para evitar doble ejecución
+			isMyTurn = false;
+			StartCoroutine(UsarDiamanteContraObjetivo(cartaDiamante));
+			return;
+		}
+		
+		// PRIORIDAD 2: Usar Dinamita si está disponible
+		GameObject cartaDinamita = BuscarCartaDinamitaEnMano();
+		if (cartaDinamita == null) return;
+		
+		int objetivoID = BuscarObjetivoParaDinamita();
+		if (objetivoID != -1)
+		{
+			// Cambiar estado inmediatamente para evitar doble ejecución
+			isMyTurn = false;
+			StartCoroutine(UsarDinamitaContraObjetivo(cartaDinamita, objetivoID));
+		}
+	}
 
     /// <summary>
     /// Busca carta de dinamita en la mano de la IA
@@ -775,4 +803,655 @@ public class AIController : MonoBehaviour
             SistemaAvataresJugadores.Instance.ResaltarTodosLosAvatares(false);
         }
     }
+	
+	/// <summary>
+	/// Busca carta de Diamante en la mano de la IA
+	/// </summary>
+	private GameObject BuscarCartaDiamanteEnMano()
+	{
+		if (MazoFisico.Instance != null && 
+			MazoFisico.Instance.manosJugadores.TryGetValue(myTotem.playerID, out ManoJugador mano))
+		{
+			foreach (GameObject carta in mano.GetCartas())
+			{
+				Carta3D cartaScript = carta.GetComponent<Carta3D>();
+				if (cartaScript != null && cartaScript.GetTipoCarta() == CardType.Diamante)
+				{
+					return carta;
+				}
+			}
+		}
+		return null;
+	}
+	
+	/// <summary>
+	/// Usa la carta de Diamante
+	/// </summary>
+	private IEnumerator UsarDiamanteContraObjetivo(GameObject cartaDiamante)
+	{
+		// Bloquear EndTurn automático
+		if (GameManager.Instance != null)
+		{
+			GameManager.Instance.bloquearEndTurnAutomatico = true;
+		}
+		
+		// Delay inicial para simular pensamiento
+		yield return new WaitForSeconds(1.5f);
+		
+		// 1. VOLTEAR LA CARTA PARA MOSTRARLA AL JUGADOR HUMANO
+		yield return StartCoroutine(VoltearCartaDiamante(cartaDiamante));
+		
+		// 2. Mostrar mensaje en UI
+		if (GestionBotonesCartas.Instance != null)
+		{
+			GestionBotonesCartas.Instance.MostrarMensaje($"IA Jugador {myTotem.playerID} usa Diamante");
+		}
+		
+		yield return new WaitForSeconds(1f);
+		
+		// 3. Iniciar colocación del Diamante
+		yield return StartCoroutine(ColocarDiamanteIA(cartaDiamante));
+	}
+	
+	/// <summary>
+	/// Voltea la carta Diamante para que el jugador humano la vea
+	/// </summary>
+	private IEnumerator VoltearCartaDiamante(GameObject cartaDiamante)
+	{
+		if (cartaDiamante == null) yield break;
+		
+		Carta3D cartaScript = cartaDiamante.GetComponent<Carta3D>();
+		if (cartaScript == null) yield break;
+		
+		Debug.Log("🃏 IA mostrando carta Diamante al jugador humano");
+		
+		// Obtener la mano de la IA
+		if (MazoFisico.Instance != null && 
+			MazoFisico.Instance.manosJugadores.TryGetValue(myTotem.playerID, out ManoJugador manoIA))
+		{
+			// 1. Levantar la carta para destacarla
+			Vector3 posicionOriginal = cartaDiamante.transform.localPosition;
+			Vector3 posicionElevada = posicionOriginal + Vector3.up * 0.8f;
+			
+			LeanTween.moveLocal(cartaDiamante, posicionElevada, 0.5f)
+				.setEase(LeanTweenType.easeOutBack);
+			
+			yield return new WaitForSeconds(0.5f);
+			
+			// 2. Voltear la carta para mostrar el frente
+			cartaScript.MostrarFrente();
+			
+			// Efecto visual de volteo (rotación)
+			Vector3 rotacionOriginal = cartaDiamante.transform.localEulerAngles;
+			Vector3 rotacionVolteo = new Vector3(rotacionOriginal.x, 180f, rotacionOriginal.z);
+			
+			/*LeanTween.rotateLocal(cartaDiamante, rotacionVolteo, 0.8f)
+				.setEase(LeanTweenType.easeInOutQuad);*/
+			
+			yield return new WaitForSeconds(0.8f);
+			
+			// 3. Mantener visible por un tiempo
+			yield return new WaitForSeconds(1.5f);
+			
+			// 4. Volver a la posición original (pero mantener el frente visible)
+			/*LeanTween.moveLocal(cartaDiamante, posicionOriginal, 0.5f)
+				.setEase(LeanTweenType.easeInBack);*/
+				
+			yield return new WaitForSeconds(0.5f);
+			
+			Debug.Log("✅ Carta Diamante mostrada correctamente");
+		}
+	}
+
+	/// <summary>
+	/// Rutina principal para colocar el Diamante (similar a construcción)
+	/// </summary>
+	private IEnumerator ColocarDiamanteIA(GameObject cartaDiamante)
+	{
+		bool imanesActivados = false;
+		
+		try
+		{
+			// 1. ACTIVAR EL DIAMANTE
+			if (GestionBotonesCartas.Instance == null || 
+				GestionBotonesCartas.Instance.hexagonoDiamantePrefab == null)
+			{
+				Debug.LogError("❌ No se puede activar Diamante - Referencias nulas");
+				CancelarUsoDiamante(cartaDiamante);
+				yield break;
+			}
+
+			// Activar el diamante
+			GestionBotonesCartas.Instance.hexagonoDiamantePrefab.SetActive(true);
+			GameObject diamante = GestionBotonesCartas.Instance.hexagonoDiamantePrefab;
+			HexagonPiece diamantePiece = diamante.GetComponent<HexagonPiece>();
+			
+			if (diamantePiece == null)
+			{
+				Debug.LogError("❌ El Diamante no tiene componente HexagonPiece");
+				CancelarUsoDiamante(cartaDiamante);
+				yield break;
+			}
+
+			// Configurar el diamante
+			diamantePiece.isConnected = false;
+			diamantePiece.SetCollidersEnabled(true);
+			diamantePiece.isFlipped = true;
+
+			Debug.Log("💎 IA activando Diamante para colocación");
+
+			yield return new WaitForSeconds(0.5f);
+
+			// 2. ACTIVAR IMANES VISUALMENTE (PARA QUE EL JUGADOR HUMANO VEA LAS OPCIONES)
+			if (MagnetSystem.Instance != null)
+			{
+				MagnetSystem.Instance.ActivarImanesParaColocacion();
+				imanesActivados = true;
+				Debug.Log("🧲 Imanes activados visualmente para Diamante (IA)");
+			}
+
+			// Esperar un poco para que el jugador vea los imanes disponibles
+			yield return new WaitForSeconds(1.5f);
+
+			// 3. SELECCIONAR Y BLOQUEAR IMÁN DISPONIBLE
+			Transform targetMagnet = SeleccionarMejorImanParaDiamante();
+			
+			if (targetMagnet == null)
+			{
+				Debug.LogWarning("⚠️ IA no encontró imán disponible para Diamante");
+				CancelarUsoDiamante(cartaDiamante);
+				yield break;
+			}
+
+			Debug.Log($"🎯 IA seleccionó imán: {targetMagnet.name}");
+
+			// 4. CALCULAR CONEXIÓN
+			string cleanMagnetName = targetMagnet.name.Split(' ')[0];
+			
+			if (!diamantePiece.magnetConnections.ContainsKey(cleanMagnetName))
+			{
+				Debug.LogError($"❌ No se puede conectar Diamante al imán {cleanMagnetName}");
+				MagnetSystem.Instance.UnlockMagnet(targetMagnet);
+				CancelarUsoDiamante(cartaDiamante);
+				yield break;
+			}
+
+			string diamanteMagnetName = diamantePiece.magnetConnections[cleanMagnetName];
+			Transform diamanteMagnet = diamante.transform.Find(diamanteMagnetName);
+
+			if (diamanteMagnet == null)
+			{
+				Debug.LogError($"❌ No se encontró imán del Diamante: {diamanteMagnetName}");
+				MagnetSystem.Instance.UnlockMagnet(targetMagnet);
+				CancelarUsoDiamante(cartaDiamante);
+				yield break;
+			}
+
+			// 5. MOVER Y CONECTAR EL DIAMANTE
+			yield return StartCoroutine(MoverDiamanteAIConexion(diamante, targetMagnet, diamanteMagnet, diamantePiece));
+			
+			// 6. DESBLOQUEAR IMÁN Y FINALIZAR
+			MagnetSystem.Instance.UnlockMagnet(targetMagnet);
+			
+			// Finalizar colocación exitosa
+			yield return StartCoroutine(FinalizarUsoDiamante(cartaDiamante));
+		}
+		finally
+		{
+			// 7. DESACTIVAR IMANES VISUALMENTE (SIEMPRE, INCLUSO EN CASO DE ERROR)
+			if (imanesActivados && MagnetSystem.Instance != null)
+			{
+				MagnetSystem.Instance.DesactivarImanesColocacion();
+				Debug.Log("🧲 Imanes desactivados visualmente después de colocar Diamante (IA)");
+			}
+		}
+	}
+
+	/// <summary>
+	/// Selecciona el mejor imán para colocar el Diamante
+	/// </summary>
+	private Transform SeleccionarMejorImanParaDiamante()
+	{
+		// Obtener imanes disponibles (mismo criterio que construcción)
+		List<Transform> availableMagnets = MagnetSystem.Instance.allMagnets
+			.Where(m => MagnetSystem.Instance.IsMagnetAvailableForAI(m))
+			.Where(m => !EsImanDeNuestroColor(m)) // 🔴 FILTRO CRÍTICO: Excluir nuestro color
+			.ToList();
+
+		if (availableMagnets.Count == 0)
+		{
+			Debug.Log("❌ No hay imanes disponibles para Diamante (todos son de nuestro color o no disponibles)");
+			return null;
+		}
+
+		Debug.Log($"🔍 Evaluando {availableMagnets.Count} imanes disponibles para Diamante (excluyendo nuestro color)");
+
+		// Estrategia: seleccionar imán que maximice el valor estratégico
+		Transform bestMagnet = null;
+		float bestScore = -1000f;
+
+		foreach (Transform magnet in availableMagnets)
+		{
+			// Verificar que el imán sigue disponible antes de intentar bloquearlo
+			if (!MagnetSystem.Instance.IsMagnetAvailableForAI(magnet))
+				continue;
+
+			float score = CalcularPuntuacionImanParaDiamante(magnet);
+			
+			// Solo considerar puntuaciones razonables
+			if (score > -10f && MagnetSystem.Instance.TryLockMagnet(magnet))
+			{
+				if (score > bestScore)
+				{
+					// Liberar el imán anterior si había uno
+					if (bestMagnet != null)
+					{
+						MagnetSystem.Instance.UnlockMagnet(bestMagnet);
+					}
+					
+					bestScore = score;
+					bestMagnet = magnet;
+					Debug.Log($"✅ Nuevo mejor imán: {magnet.name} con puntuación: {bestScore}");
+				}
+				else
+				{
+					// Liberar este imán ya que no es el mejor
+					MagnetSystem.Instance.UnlockMagnet(magnet);
+				}
+			}
+			else
+			{
+				Debug.Log($"❌ Iman {magnet.name} descartado - Puntuación: {score}");
+			}
+		}
+
+		if (bestMagnet != null)
+		{
+			Debug.Log($"🎯 MEJOR IMÁN SELECCIONADO: {bestMagnet.name} con puntuación: {bestScore}");
+			
+			// Mostrar información detallada del imán seleccionado
+			HexagonPiece piezaSeleccionada = MagnetSystem.Instance.GetPieceForMagnet(bestMagnet);
+			if (piezaSeleccionada != null)
+			{
+				Debug.Log($"💎 Diamante se colocará en: {piezaSeleccionada.name} (Color: {piezaSeleccionada.PieceColor})");
+			}
+		}
+		else
+		{
+			Debug.Log("⚠️ No se pudo seleccionar ningún imán con puntuación aceptable");
+		}
+
+		return bestMagnet;
+	}
+
+	/// <summary>
+	/// Calcula la puntuación estratégica de un imán para colocar el Diamante
+	/// </summary>
+	private float CalcularPuntuacionImanParaDiamante(Transform magnet)
+	{
+		float score = 0f;
+		
+		// Obtener la pieza a la que está conectado el imán
+		HexagonPiece connectedPiece = MagnetSystem.Instance.GetPieceForMagnet(magnet);
+		if (connectedPiece == null) return -1000f;
+
+		// Obtener todos los jugadores rivales
+		List<PlayerTotem> rivales = ObtenerJugadoresRivales();
+		if (rivales.Count == 0) return score;
+
+		Debug.Log($"🎯 Calculando puntuación para imán {magnet.name} en pieza {connectedPiece.name} (Color: {connectedPiece.PieceColor})");
+
+		// 🔴 PENALIZACIÓN MÁXIMA: Si la pieza es de NUESTRO COLOR
+		if (connectedPiece.PieceColor == myTotem.playerColor)
+		{
+			Debug.Log($"   🚫🚫🚫 PENALIZACIÓN MÁXIMA: Pieza de nuestro propio color");
+			return -1000f; // Descartar completamente
+		}
+
+		// 🟢 BONUS MÁXIMO: Si la pieza es de color de ALGÚN RIVAL
+		bool esColorRival = rivales.Any(rival => connectedPiece.PieceColor == rival.playerColor);
+		if (esColorRival)
+		{
+			score += 50f; // Bonus muy alto por estar en color rival
+			Debug.Log($"   ✅✅✅ BONUS MÁXIMO: Pieza de color rival");
+		}
+
+		// 1. ESTRATEGIA PRINCIPAL: CERCANÍA A RIVALES (pero NO en nuestro color)
+		float puntuacionRivales = CalcularPuntuacionProximidadRivales(connectedPiece, rivales);
+		score += puntuacionRivales;
+
+		// 2. EVITAR NUESTRO PROPIO COLOR EN EL ENTORNO
+		float puntuacionNuestroColor = CalcularPuntuacionNuestroColor(connectedPiece);
+		score -= puntuacionNuestroColor * 10f; // Penalización muy alta
+
+		// 3. ESTRATEGIA: POSICIONES ESTRECHAS/CERRADAS
+		float puntuacionEstrategia = CalcularPuntuacionEstrategica(connectedPiece);
+		score += puntuacionEstrategia;
+
+		// 4. CENTRALIDAD MODERADA
+		float distanciaAlCentro = Vector3.Distance(connectedPiece.transform.position, Vector3.zero);
+		score += (3f - Mathf.Min(distanciaAlCentro, 3f)); // Bonus moderado por centralidad
+
+		// 5. EVITAR PIEZAS PRINCIPALES
+		if (connectedPiece.isMainPiece)
+		{
+			score -= 20f;
+		}
+
+		Debug.Log($"🧮 Iman {magnet.name} - Puntuación final: {score}");
+
+		return score;
+	}
+	
+	/// <summary>
+	/// Obtiene la lista de jugadores rivales (excluyendo al propio)
+	/// </summary>
+	private List<PlayerTotem> ObtenerJugadoresRivales()
+	{
+		List<PlayerTotem> rivales = new List<PlayerTotem>();
+		
+		if (GameManager.Instance != null)
+		{
+			foreach (PlayerTotem jugador in GameManager.Instance.players)
+			{
+				if (jugador != myTotem && jugador.playerID != myTotem.playerID)
+				{
+					rivales.Add(jugador);
+				}
+			}
+		}
+		
+		return rivales;
+	}
+
+	/// <summary>
+	/// Calcula puntuación basada en proximidad a colores de rivales
+	/// </summary>
+	private float CalcularPuntuacionProximidadRivales(HexagonPiece pieza, List<PlayerTotem> rivales)
+	{
+		float puntuacion = 0f;
+		int hexagonosRivalCercanos = 0;
+
+		// Buscar todos los hexágonos del tablero
+		HexagonPiece[] todosHexagonos = FindObjectsByType<HexagonPiece>(FindObjectsSortMode.None);
+		
+		foreach (HexagonPiece hex in todosHexagonos)
+		{
+			if (hex == pieza || !hex.isFlipped) continue;
+
+			// Calcular distancia
+			float distancia = Vector3.Distance(pieza.transform.position, hex.transform.position);
+			
+			// Solo considerar hexágonos cercanos (dentro de 3 unidades)
+			if (distancia <= 3f)
+			{
+				// Verificar si este hexágono es de color de algún rival
+				foreach (PlayerTotem rival in rivales)
+				{
+					if (hex.PieceColor == rival.playerColor)
+					{
+						hexagonosRivalCercanos++;
+						
+						// Mientras más cerca del rival, MÁS puntos
+						float puntuacionDistancia = (3f - distancia) * 5f; // Aumentamos el multiplicador
+						puntuacion += puntuacionDistancia;
+						
+						Debug.Log($"   🔍 Hexágono rival cercano: {hex.name} (distancia: {distancia:F2}, color rival: {rival.playerColor})");
+						break;
+					}
+				}
+			}
+		}
+
+		// Bonus por cantidad de hexágonos rivales cercanos
+		puntuacion += hexagonosRivalCercanos * 3f;
+
+		Debug.Log($"   🎯 Proximidad rivales: {hexagonosRivalCercanos} hexágonos - Puntuación: {puntuacion}");
+		return puntuacion;
+	}
+
+	/// <summary>
+	/// Calcula penalización por proximidad a nuestro propio color
+	/// </summary>
+	private float CalcularPuntuacionNuestroColor(HexagonPiece pieza)
+	{
+		float penalizacion = 0f;
+		int hexagonosNuestroColorCercanos = 0;
+
+		HexagonPiece[] todosHexagonos = FindObjectsByType<HexagonPiece>(FindObjectsSortMode.None);
+		
+		foreach (HexagonPiece hex in todosHexagonos)
+		{
+			if (hex == pieza || !hex.isFlipped) continue;
+
+			float distancia = Vector3.Distance(pieza.transform.position, hex.transform.position);
+			
+			// Solo considerar hexágonos cercanos (dentro de 3.5 unidades)
+			if (distancia <= 3.5f)
+			{
+				// Penalizar si es de nuestro color
+				if (hex.PieceColor == myTotem.playerColor)
+				{
+					hexagonosNuestroColorCercanos++;
+					
+					// Mientras más cerca de nuestro color, MÁS penalización
+					float penalizacionDistancia = (3.5f - distancia) * 8f; // Penalización muy alta
+					penalizacion += penalizacionDistancia;
+					
+					Debug.Log($"   ⚠️ Hexágono nuestro color cercano: {hex.name} (distancia: {distancia:F2}, penalización: {penalizacionDistancia})");
+				}
+			}
+		}
+
+		// Penalización adicional por cantidad
+		penalizacion += hexagonosNuestroColorCercanos * 5f;
+
+		Debug.Log($"   🚫 Nuestro color cercano: {hexagonosNuestroColorCercanos} hexágonos - Penalización total: {penalizacion}");
+		return penalizacion;
+	}
+	
+	/// <summary>
+	/// Verifica si un imán está en una pieza de nuestro color (para descarte inmediato)
+	/// </summary>
+	private bool EsImanDeNuestroColor(Transform magnet)
+	{
+		HexagonPiece connectedPiece = MagnetSystem.Instance.GetPieceForMagnet(magnet);
+		if (connectedPiece == null) return false;
+		
+		bool esNuestroColor = connectedPiece.PieceColor == myTotem.playerColor;
+		
+		if (esNuestroColor)
+		{
+			Debug.Log($"❌❌❌ IMÁN DESCARTADO: {magnet.name} está en pieza de NUESTRO COLOR");
+		}
+		
+		return esNuestroColor;
+	}
+
+	/// <summary>
+	/// Calcula puntuación basada en estrategia de posición (dificultad de acceso)
+	/// </summary>
+	private float CalcularPuntuacionEstrategica(HexagonPiece pieza)
+	{
+		float puntuacion = 0f;
+
+		// Obtener vecinos de esta pieza
+		List<HexagonPiece> vecinos = GameManager.Instance.GetNeighbors(pieza);
+		
+		// Estrategia 1: Preferir piezas con menos conexiones (más "callejones sin salida")
+		int conexiones = vecinos.Count;
+		puntuacion += (6 - Mathf.Min(conexiones, 6)) * 1.5f; // Menos conexiones = más puntos
+
+		// Estrategia 2: Preferir piezas que estén en "bordes" del tablero
+		float distanciaAlCentro = Vector3.Distance(pieza.transform.position, Vector3.zero);
+		if (distanciaAlCentro > 3f)
+		{
+			puntuacion += 2f; // Bonus por estar en periferia
+		}
+
+		// Estrategia 3: Preferir piezas que no sean de robar carta (para no dar ventajas adicionales)
+		if (!pieza.isStealCardPiece)
+		{
+			puntuacion += 1f;
+		}
+
+		Debug.Log($"   🧩 Pieza {pieza.name} - Estrategia: {puntuacion} (conexiones: {conexiones})");
+		return puntuacion;
+	}
+
+	/// <summary>
+	/// Mueve el Diamante para conectarlo (igual que construcción)
+	/// </summary>
+	private IEnumerator MoverDiamanteAIConexion(GameObject diamante, Transform targetMagnet, Transform diamanteMagnet, HexagonPiece diamantePiece)
+	{
+		if (targetMagnet == null || diamanteMagnet == null) yield break;
+		if (!MagnetSystem.Instance.IsMagnetLockedByAI(targetMagnet)) yield break;
+
+		Vector3 connectionOffset = diamanteMagnet.position - diamante.transform.position;
+		Vector3 targetPosition = targetMagnet.position - connectionOffset;
+		Vector3 startPos = diamante.transform.position;
+		Vector3 raisedPosition = startPos + Vector3.up * 1.0f;
+
+		float liftDuration = 0.3f;
+		float moveDuration = 0.6f;
+		float descendDuration = 0.3f;
+
+		diamantePiece.SetCollidersEnabled(false);
+
+		Debug.Log("💎 IA moviendo Diamante a posición...");
+
+		// Fase 1: Levantar
+		LeanTween.move(diamante, raisedPosition, liftDuration).setEase(LeanTweenType.easeOutQuad);
+		yield return new WaitForSeconds(liftDuration);
+
+		// Fase 2: Mover horizontalmente
+		LeanTween.move(diamante, new Vector3(targetPosition.x, raisedPosition.y, targetPosition.z), moveDuration)
+				 .setEase(LeanTweenType.easeInOutQuad);
+		yield return new WaitForSeconds(moveDuration);
+
+		// Fase 3: Bajar
+		LeanTween.move(diamante, targetPosition, descendDuration).setEase(LeanTweenType.easeInQuad);
+		yield return new WaitForSeconds(descendDuration);
+
+		diamante.transform.position = targetPosition;
+		diamantePiece.isConnected = true;
+		
+		// Confirmar conexión (igual que construcción)
+		HexagonPiece targetPiece = MagnetSystem.Instance.GetPieceForMagnet(targetMagnet);
+		if (MagnetSystem.Instance.ConfirmAIConnection(targetMagnet, diamanteMagnet) && targetPiece != null)
+		{
+			diamantePiece.RegisterConnection(targetPiece);
+			MagnetSystem.Instance.ProcessNewConnection(diamantePiece, diamanteMagnet);
+			Debug.Log($"💎 Diamante conectado a {targetPiece.name}");
+		}
+
+		diamantePiece.SetCollidersEnabled(true);
+		MagnetSystem.Instance.UpdateMagnetOccupancyFromPhysics();
+		targetPiece?.ForcePhysicalConnectionCheck();
+		diamantePiece.ForcePhysicalConnectionCheck();
+	}
+
+	/// <summary>
+	/// Finaliza el uso del Diamante
+	/// </summary>
+	private IEnumerator FinalizarUsoDiamante(GameObject cartaDiamante)
+	{
+		Debug.Log("✅ IA finalizando uso de Diamante");
+
+		// Asegurar que la carta sigue mostrando el frente
+		Carta3D cartaScript = cartaDiamante.GetComponent<Carta3D>();
+		if (cartaScript != null)
+		{
+			cartaScript.MostrarFrente();
+		}
+
+		// Mover carta al descarte
+		if (MazoDescarte.Instance != null && 
+			MazoFisico.Instance.manosJugadores.TryGetValue(myTotem.playerID, out ManoJugador manoIA))
+		{
+			// Animación al descarte (manteniendo el frente visible durante el movimiento)
+			Vector3 posicionDescarte = MazoDescarte.Instance.transform.position;
+			
+			// Levantar un poco antes de mover al descarte
+			LeanTween.moveLocal(cartaDiamante, cartaDiamante.transform.localPosition + Vector3.up * 0.5f, 0.3f)
+				.setEase(LeanTweenType.easeOutBack);
+			
+			yield return new WaitForSeconds(0.3f);
+			
+			// Mover al descarte
+			LeanTween.move(cartaDiamante, posicionDescarte, 1f)
+				.setEase(LeanTweenType.easeInOutCubic);
+			
+			// Rotar a la posición de descarte (pero mantener el frente visible)
+			LeanTween.rotate(cartaDiamante, new Vector3(90f, 180f, 0f), 0.5f);
+			
+			yield return new WaitForSeconds(1f);
+			
+			// Ahora sí, mostrar dorso en el descarte
+			if (cartaScript != null)
+			{
+				cartaScript.MostrarDorso();
+				// Rotar completamente al descarte
+				cartaDiamante.transform.rotation = Quaternion.Euler(90f, 0f, 0f);
+			}
+			
+			MazoDescarte.Instance.AgregarCartaDescarte(cartaDiamante);
+			manoIA.RemoverCarta(cartaDiamante);
+			
+			Debug.Log("✅ Carta Diamante movida al descarte");
+		}
+
+		// Ocultar mensaje
+		if (GestionBotonesCartas.Instance != null)
+		{
+			GestionBotonesCartas.Instance.OcultarMensaje();
+		}
+
+		yield return new WaitForSeconds(1f);
+
+		// Desbloquear EndTurn y terminar turno
+		if (GameManager.Instance != null)
+		{
+			GameManager.Instance.bloquearEndTurnAutomatico = false;
+		}
+		
+		GameManager.Instance?.EndTurn();
+	}
+
+	/// <summary>
+	/// Cancela el uso del Diamante en caso de error
+	/// </summary>
+	private void CancelarUsoDiamante(GameObject cartaDiamante)
+	{
+		Debug.Log("❌ IA cancelando uso de Diamante");
+
+		// Ocultar mensaje
+		if (GestionBotonesCartas.Instance != null)
+		{
+			GestionBotonesCartas.Instance.OcultarMensaje();
+		}
+
+		// Desactivar imanes visualmente (por si acaso)
+		if (MagnetSystem.Instance != null)
+		{
+			MagnetSystem.Instance.DesactivarImanesColocacion();
+			Debug.Log("🧲 Imanes desactivados visualmente por cancelación (IA)");
+		}
+
+		// Desactivar Diamante si se activó
+		if (GestionBotonesCartas.Instance != null && 
+			GestionBotonesCartas.Instance.hexagonoDiamantePrefab != null)
+		{
+			GestionBotonesCartas.Instance.hexagonoDiamantePrefab.SetActive(false);
+		}
+
+		// Desbloquear EndTurn
+		if (GameManager.Instance != null)
+		{
+			GameManager.Instance.bloquearEndTurnAutomatico = false;
+		}
+		
+		// Terminar turno
+		GameManager.Instance?.EndTurn();
+	}
 }

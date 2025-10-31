@@ -142,6 +142,14 @@ public class FinDelJuegoUI : MonoBehaviour
 			}
 		}
 
+		// ✅ NUEVO: Agregar puntos adicionales por diamante
+		if (GameManager.Instance != null && GameManager.Instance.puntosAdicionalesPorJugador.ContainsKey(playerID))
+		{
+			int puntosDiamante = GameManager.Instance.puntosAdicionalesPorJugador[playerID];
+			puntuacion += puntosDiamante;
+			Debug.Log($"💎 Jugador {playerID} - Puntos por diamante: {puntosDiamante}, Total: {puntuacion}");
+		}
+
 		return puntuacion;
 	}
 
